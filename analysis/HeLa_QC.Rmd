@@ -1,0 +1,771 @@
+---
+title: "Qaulity Check (HeLa)"
+author: "Wenjun Liu"
+date: "12/03/2020"
+output: 
+  html_document: 
+    fig_caption: yes
+    number_sections: yes
+---
+
+```{r setup, echo=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  fig.align = "center",
+  fig.width = 10
+)
+```
+
+#Set libaries
+```{r loadPackages}
+library(ngsReports)
+library(tidyverse)
+library(magrittr)
+library(edgeR)
+library(AnnotationHub)
+library(ensembldb)
+library(scales)
+library(pander)
+library(cowplot)
+library(corrplot)
+library(ggrepel)
+library(RColorBrewer)
+library(pheatmap)
+library(UpSetR)
+library(msigdbr)
+library(GO.db)
+library(goseq)
+library(kableExtra)
+library(plotly)
+library(reshape2)
+library(org.Hs.eg.db)
+library(cqn)
+library(DT)
+```
+
+```{r setOpts}
+theme_set(theme_bw())
+panderOptions("table.split.table", Inf)
+panderOptions("table.style", "rmarkdown")
+panderOptions("big.mark", ",")
+```
+
+```{r annotationSetup}
+ah <- AnnotationHub() %>%
+	subset(species == "Homo sapiens") %>%
+	subset(rdataclass == "EnsDb")
+ensDB <- ah[["AH75011"]]
+grTrans <- transcripts(ensDB)
+trLengths <- exonsBy(ensDB, "tx") %>%
+	width() %>%
+	vapply(sum, integer(1))
+mcols(grTrans)$length <- trLengths[names(grTrans)]
+```
+
+```{r geneAnnotation}
+gcGene <- grTrans %>%
+  mcols() %>%
+  as.data.frame() %>%
+  dplyr::select(gene_id, tx_id, gc_content, length) %>%
+  as_tibble() %>%
+  group_by(gene_id) %>%
+  summarise(
+    gc_content = sum(gc_content*length) / sum(length),
+    length = ceiling(median(length))
+  )
+grGenes <- genes(ensDB)
+mcols(grGenes) %<>%
+  as.data.frame() %>%
+  left_join(gcGene) %>%
+  as.data.frame() %>%
+  DataFrame()
+```
+
+Metadata of each fastq file and each sample was loaded. In this analysis, only HeLa samples were investigated. Metadata of all HeLa samples could be explored through the table below:
+
+```{r metaData}
+metadata <- here::here("data", "metadata.txt") %>%
+  read.table(header = TRUE, sep = "\t",stringsAsFactors = FALSE) %>% 
+  as_tibble()%>%
+  mutate_at(vars(one_of(c("CELL", "TREAT","CONTR", "TIME"))), as.factor)
+filename <- here::here("data", "filename.txt") %>%
+  read.table(header = TRUE, sep = "\t",stringsAsFactors = FALSE) %>% 
+  as_tibble()%>%
+  mutate_at(vars(one_of(c("CELL", "TREAT","CONTR", "TIME"))), as.factor)
+labels <- structure(
+  filename$sample,
+  names = filename$Filename
+)
+# extract information for Hela cell line
+helaSequence <- subset(filename, CELL == "HeLa.tfLC3")$Filename
+hela_metadata <- metadata %>%
+  dplyr::filter(CELL == "HeLa.tfLC3")
+hela_metadata %>%
+  dplyr::select(
+    `Cell line` = CELL, 
+    Treatment = TREAT, 
+    Time = TIME, 
+    sample, 
+    RG.ratio
+  ) %>%
+  datatable(filter = "top")
+```
+There are in total `r nrow(hela_metadata)` HeLa samples. Study design is illustrated through the figure embedded in the home page. 
+
+To perform quality control, GC content and length of each `r comma(length(grTrans))` transcripts are derived from Ensembl release `r ensemblVersion(ensDB)` using the  `AnnotationHub` package. RNA-seq data provided are pair-end total RNA reads.
+
+# Raw Data
+
+## Library Sizes
+
+```{r rawFqc}
+rawFqc <- here::here("data", "0_rawData", "FastQC") %>%
+  list.files( pattern = "zip", full.names = TRUE) %>%
+  FastqcDataList()
+```
+
+
+```{r plotLibSizes, fig.cap = "*Library Sizes for Hela Cell Line samples before any processing was undertaken.*"}
+Hela <- grepl(paste(helaSequence, collapse="|"),  fqName(rawFqc)) 
+r1 <- grepl("R1", fqName(rawFqc))
+Hela_r1 <- r1 & Hela
+Hela_r2 <- Hela != Hela_r1
+plotReadTotals(rawFqc[Hela_r1], labels = labels[Hela_r1])
+```
+
+Library Sizes for the raw, unprocessed dataset ranged between `r pander(comma(range(readTotals(rawFqc[Hela_r1])$Total_Sequences)))` reads among HeLa samnples.
+
+## Over-represented Sequences
+
+The top 30 Overrepresented sequences were analysed using `blastn`.
+
+```{r overrepresented sequences}
+getModule(rawFqc[Hela], "Overrep") %>% 
+    group_by(Sequence, Possible_Source) %>% 
+    summarise(`Found In` = n(), `Highest Percentage` = max(Percentage)) %>% 
+    arrange(desc(`Highest Percentage`), desc(`Found In`)) %>% 
+    ungroup() %>% 
+    dplyr::slice(1:30) %>%
+    mutate(`Highest Percentage` = percent_format(0.01)(`Highest Percentage`/100)) %>%
+    pander(
+        justify = "llrr",
+        caption = paste(
+            "*Top", nrow(.),"Overrepresented sequences.",
+            "The number of samples they were found in is shown,",
+            "along with the percentage of the most 'contaminated' sample.*"
+            )
+    )
+#overRep2Fasta(rawFqc, "top30.fa")
+```
+
+## GC Content
+
+To determine if rRNA depletion was done succesfully in this total RNA dataset, GC contents for R1 and R2 read and percentage of each library containing >70% GC contents were plotted. 
+
+
+```{r gcPlots, fig.cap="*GC content for Hela Cells R1 and R2 reads. Both of the graphs show a large peak and a small spike in GC content at around 65% and 83% respectively, wich might resulted from incomplete rRNA depletion."}
+gcPlots <- list(
+    r1 = plotGcContent(
+        x = rawFqc[Hela_r1], 
+        labels = labels[Hela_r1],
+        plotType = "line",
+        gcType = "Transcriptome",
+        species = "Hsapiens"
+    ),
+    r2 = plotGcContent(
+        x = rawFqc[Hela_r2], 
+        labels = labels[Hela_r2],
+        plotType = "line",
+        gcType = "Transcriptome",
+        species = "Hsapiens"
+    )
+)
+lg <- get_legend(gcPlots$r2 + theme(legend.position = "bottom")) 
+plot_grid(
+    plot_grid(
+        r1 = gcPlots$r1 + 
+            ggtitle("R1: GC Distribution", subtitle = c()) +
+            theme(legend.position = "none"),
+        r2 = gcPlots$r2 + 
+            ggtitle("R2: GC Distribution", subtitle = c()) +
+            theme(legend.position = "none")
+    ),
+    lg = lg,
+    nrow = 2,
+    rel_heights = c(5,2)
+)
+```
+
+
+```{r gcPerc, fig.cap=paste("*Percentages of each library which contain >70% GC. Using the known theoretical distribution, this should be", percent_format(0.01)(sum(dplyr::filter(getGC(gcTheoretical, "Hsapiens", type = "Trans"), GC_Content > 70)$Hsapiens)), "of the total library.*"), fig.width=8}
+gc <- getModule(rawFqc[Hela], "Per_sequence_GC") 
+rawGC <- gc %>% 
+    group_by(Filename) %>% 
+    mutate(Freq = Count / sum(Count)) %>%
+    dplyr::filter(GC_Content > 70) %>% 
+    summarise(Freq = sum(Freq)) %>% 
+    arrange(desc(Freq)) %>%
+    left_join(filename) 
+rawGC %>%
+    ggplot(aes(sample, Freq, fill = read)) +
+    geom_bar(stat = "identity", position = "dodge") +
+    scale_y_continuous(labels = percent) +
+    facet_wrap(~CELL, scales = "free_x") +
+    labs(x = "Sample", y = "Percent of Total")
+```
+
+# Trimming
+
+```{r trimStats}
+trimFqc <- here::here("data", "1_trimmedData", "FastQC") %>%
+    list.files(
+    pattern = "zip", 
+    full.names = TRUE
+) %>%
+    FastqcDataList()
+trimStats <- readTotals(rawFqc) %>%
+    dplyr::rename(Raw = Total_Sequences) %>%
+    left_join(readTotals(trimFqc), by = "Filename") %>%
+    dplyr::rename(Trimmed = Total_Sequences) %>%
+    dplyr::filter(grepl("R1", Filename)) %>%
+    mutate(
+        Discarded = 1 - Trimmed/Raw,
+        Retained = Trimmed / Raw
+    )
+```
+
+After adapter trimming between `r pander(range(percent_format(0.01)(trimStats$Discarded)))` of reads were discarded.
+
+# Aligned Data
+
+Trimmed reads were aligned to the human genome assembly GRCh38.p13 from `Ensembl Release 98` using `STAR 2.7.0d` and summarised to each gene using `featureCounts`. These read counts are read into a DGEList object for gene-level analysis. 
+
+
+```{r dgeList}
+minCPM <- 1.5
+minSamples <- 3
+dgeList <- here::here("data", "2_alignedData", "featureCounts", "genes.out") %>%
+  read_delim(delim = "\t") %>%
+  set_names(basename(names(.))) %>%
+  as.data.frame() %>%
+  column_to_rownames("Geneid") %>%
+  as.matrix() %>% 
+  set_colnames(str_remove(colnames(.), "Aligned.sortedByCoord.out.bam")) %>%
+  DGEList(
+    samples = tibble(sample = colnames(.)) %>%
+      left_join(dplyr::filter(filename, read == "R1")),
+    genes = grGenes[rownames(.)] %>%
+      as.data.frame() %>%
+      dplyr::select(
+        chromosome = seqnames, start, end, 
+        gene_id, gene_name, gene_biotype, description, 
+        entrezid, gc_content, length
+      )
+  ) %>%
+  .[!grepl("rRNA", .$genes$gene_biotype),] %>%
+  calcNormFactors()
+#save(dgeList, here::here("data/dgeList.rda"))
+hela_cell <- grepl(paste(unique(hela_metadata$sample), collapse="|"),dgeList$samples$sample)  
+hela_dgeList <- dgeList[,hela_cell]
+hela_dgeList %<>% .[rowSums(cpm(.) >= minCPM) >= minSamples,]
+```
+
+During this process, genes were removed if:
+
+- They were not considered as detectable (CPM < `r minCPM` in > `r ncol(hela_dgeList) - minSamples` samples). This translates to > `r ceiling(min(minCPM * hela_dgeList$samples$lib.size/1e6))` reads assigned a gene in all samples from one or more of the treatment groups
+- The `gene_biotype` was any type of `rRNA`.
+
+These filtering steps returned gene-level counts for `r comma(nrow(hela_dgeList))` genes, with total library sizes between `r pander(comma(range(hela_dgeList$samples$lib.size)))` reads assigned to genes.
+
+```{r treatCols}
+treatCols <- hela_metadata$TREAT %>%
+  levels() %>%
+  length() %>%
+  brewer.pal("Set1") %>%
+  setNames(levels(hela_metadata$TREAT))
+```
+
+```{r plotDensities, fig.width=5, fig.height=4, fig.cap="*Expression density plots for all samples after filtering, showing logCPM values.*"}
+cpm(hela_dgeList, log = TRUE) %>%
+  as.data.frame() %>%
+  pivot_longer(
+    cols = everything(),
+    names_to = "sample",
+    values_to = "logCPM"
+  ) %>%
+  split(f = .$sample) %>%
+  lapply(function(x){
+    d <- density(x$logCPM)
+    tibble(
+      sample = unique(x$sample),
+      x = d$x,
+      y = d$y
+    )
+  }) %>%
+  bind_rows() %>%
+  left_join(metadata) %>%
+  ggplot(aes(x, y, colour = TREAT, group = sample)) +
+  geom_line() +
+  scale_colour_manual(
+    values = treatCols
+  ) +
+  labs(
+    x = "logCPM",
+    y = "Density",
+    colour = "TREAT"
+  )
+```
+
+## Cell line labelling checking
+
+To check if there was any potential sample mis-labeling, a principle component analysis (PCA) was performed on control samples.
+
+```{r ControlPca} 
+contr_metadata <- metadata %>%
+  dplyr::filter(CONTR == "1")
+contr_cell <- grepl(paste(unique(contr_metadata$sample), collapse="|"),dgeList$samples$sample)  
+contro_dgeList <- dgeList[,contr_cell]
+contro_pca <- cpm(contro_dgeList, log = TRUE) %>%
+    t() %>%
+    prcomp()
+contro_pcaVars <- percent_format(0.1)(summary(contro_pca)$importance["Proportion of Variance",])
+```
+
+```{r plotPCA, fig.width=4, fig.height=4, fig.cap="*PCA of all control HeLa cells' gene-level counts.*"}
+contro_pca$x %>%
+  as.data.frame() %>%
+  rownames_to_column("sample") %>%
+  left_join(contr_metadata) %>%
+  as_tibble() %>%
+  mutate(CELL = vapply(.$CELL, function(x){
+    str_remove(x, ".tfLC3")
+  }, character(1))) %>%
+  dplyr::rename(Cell = CELL) %>%
+  ggplot(aes(PC1, PC2, colour = Cell, fill = Cell)) +
+  geom_point() +
+  geom_text_repel(aes(label = sample), show.legend = FALSE, 
+                  size = 3) +
+  stat_ellipse(geom = "polygon", alpha = 0.05, show.legend = FALSE) +
+  guides(fill = FALSE) %>%
+  labs(
+    x = paste0("PC1 (", contro_pcaVars[["PC1"]], ")"),
+    y = paste0("PC2 (", contro_pcaVars[["PC2"]], ")"),
+    colour = "Cell"
+  )
+```
+
+This PCA plot shows that samples of different cell lines were clustered at different spots, hence no mislablleing was identified at this stage. 
+
+
+##GC Content
+```{r gcInfo}
+gcInfo <- hela_dgeList$counts%>%
+	as.data.frame() %>%
+	rownames_to_column("gene_id")%>%
+  as_tibble() %>%
+	pivot_longer(
+	  cols = ends_with(as.character(c(0:9))),
+		names_to = "sample",
+		values_to = "counts"
+	) %>%
+	left_join(
+		mcols(grTrans) %>% as.data.frame()
+	) %>%
+	dplyr::select(
+		gene_id, sample, counts, gc_content, length
+	) %>%
+    split(f = .$sample) %>%
+    lapply(function(x){
+        DataFrame(
+            gc = Rle(x$gc_content/100, x$counts),
+            logLen = Rle(log10(x$length), x$counts)
+        )
+    }
+    ) 
+gcSummary <- gcInfo %>%
+    vapply(function(x){
+        c(mean(x$gc), sd(x$gc), mean(x$logLen), sd(x$logLen))
+        }, numeric(4)
+        ) %>%
+    t() %>%
+    set_colnames(
+        c("mn_gc", "sd_gc", "mn_logLen", "sd_logLen")
+    ) %>%
+    as.data.frame() %>%
+    rownames_to_column("sample") %>%
+    as_tibble() %>%
+    left_join(hela_metadata) %>%
+    dplyr::select(sample, CELL, TREAT, TIME, CONTR, contains("_"))
+```
+
+```{r gcCors}
+gcCors <- gcSummary %>%
+  dplyr::select(mn_gc, mn_logLen, sd_gc, sd_logLen) %>%
+    cor()
+```
+
+```{r gcDev}
+# gcDev is the standard deviation of observed GC frequencies from the expected GC frequencies, as obtained from the known transcriptome.
+gcDev <- gc %>%
+    left_join(filename) %>%
+    group_by(sample, Filename) %>%
+    mutate(Freq = Count / sum(Count)) %>%
+    left_join(
+        getGC(gcTheoretical, "Hsapiens", "Trans")) %>%
+    dplyr::rename(actual = Hsapiens) %>%
+    mutate(res = Freq - actual) %>%
+    summarise(ss = sum(res^2), n = n()) %>%
+    ungroup() %>%
+    mutate(sd = sqrt(ss / (n - 1)))
+
+```
+
+It was identified in the previous steps that the percentage of libraries containing greater than 70% GC content is larger than the expected value in almost half of the libraries. 
+
+A *run length encoded* (RLE) vector was formed for each sample taking the number of reads for each gene as the run lengths, and both the GC content and length of each gene as the values.
+Gene lengths were transformed to the log~10~ scale due to the wide variety of lengths contained in the genome. 
+
+From these RLEs, the mean GC and mean length was calculated for each sample, and these values were compared to the proportion of raw reads with > 70% GC, taking these values from the R1 libraries only.
+
+
+```{r plotBias, fig.cap = "*Comparison of bias introduced by incomplete rRNA removal. Regression lines are shown along with standard error bands for each comparison.*", fig.width=8, fig.height=6}
+a <- gcSummary %>%
+    left_join(rawGC) %>%
+    dplyr::filter(read == "R1") %>%
+    ggplot(aes(Freq, mn_logLen)) +
+    geom_point(aes(colour = TREAT), size = 3) +
+    geom_smooth(method = "lm") +
+    scale_shape_manual(values = c(19, 1)) +
+    labs(
+        x = "Proportion of initial library with > 70% GC",
+        y = "Mean log(length)",
+        colour = "Treatment"
+    ) 
+b <- gcSummary %>%
+    left_join(rawGC) %>%
+    dplyr::filter(read == "R1") %>%
+    ggplot(aes(Freq, mn_gc)) +
+    geom_point(aes(colour = TREAT), size = 3) +
+    geom_smooth(method = "lm") +
+    scale_shape_manual(values = c(19, 1)) +
+    scale_y_continuous(labels = percent) +
+    labs(
+        x = "Proportion of initial library with > 70% GC",
+        y = "Mean GC Content",
+        colour = "Treatment"
+    ) 
+c <- gcSummary %>%
+    left_join(gcDev) %>%
+    ggplot(aes(sd, mn_logLen)) +
+    geom_point(aes(colour = TREAT), size = 3) +
+    geom_smooth(method = "lm") +
+    scale_shape_manual(values = c(19, 1)) +
+    scale_y_continuous(breaks = seq(3.2, 3.5, by = 0.02)) +
+    labs(
+        x = "SD (GC - Theoretical)",
+        y = "Mean log(length)",
+        colour = "Treatment"
+    ) 
+d <- gcSummary %>%
+    left_join(gcDev) %>%
+    ggplot(aes(sd, mn_gc)) +
+    geom_point(aes(colour = TREAT), size = 3) +
+    geom_smooth(method = "lm") +
+    scale_shape_manual(values = c(19, 1)) +
+    scale_y_continuous(labels = percent) +
+    labs(
+        x = "SD (GC - Theoretical)",
+        y = "Mean GC Content",
+        colour = "Treatment"
+    ) 
+plot_grid(
+    plot_grid(
+        a + theme(legend.position = "none"),
+        b + theme(legend.position = "none"),
+        c + theme(legend.position = "none"),
+        d + theme(legend.position = "none"),
+        nrow = 2
+    ),
+    get_legend(b),
+    nrow = 1,
+    rel_widths = c(8,1)
+)
+```
+## Initial PCA
+
+Therefore, an initial PCA was performed to check the correlations between the first three PCA components and measured variable, including average GC content,mean log~10~ gene length, treatment and time point. 
+
+```{r HelaPca}
+hela_pca <- cpm(hela_dgeList, log = TRUE) %>%
+    t() %>%
+    prcomp()
+hela_pcaVars <- percent_format(0.1)(summary(hela_pca)$importance["Proportion of Variance",])
+```
+
+```{r pcaCorrs, fig.cap="*Correlations between the first three principal components and measured variables. Cell type, time and treatments were converted to an ordered categorical variable for the purposes of visualisation*"}
+hela_pca$x %>%
+    as.data.frame() %>%
+    rownames_to_column("sample") %>%
+    left_join(gcSummary) %>%
+    as_tibble() %>%  
+    left_join(gcDev) %>%
+    dplyr::select(
+        PC1, PC2, PC3, 
+        Mean_GC = mn_gc, 
+        Mean_Length = mn_logLen, 
+        SD = sd,
+        TREAT,
+        TIME
+    ) %>% 
+    mutate(TREAT = as.numeric(as.factor(TREAT)),
+           TIME = as.numeric(as.factor(TIME))) %>%
+    cor() %>% 
+    corrplot(
+        type = "lower", 
+        diag = FALSE, 
+        addCoef.col = 1, addCoefasPercent = TRUE
+    )
+```
+
+Strong correlations between GC content, gene length and PC1 were observed, meaning those systematic artefacts would most likely have introduced unwanted noises. 
+
+```{r labeller}
+# Labeller function for gene names was defined for simpler plotting in downstream analysis. 
+geneLabeller <- structure(grGenes$gene_name, names = grGenes$gene_id) %>%
+  as_labeller()
+```
+
+PCA plots of all HeLa samples were plotted. Overall, control samples, regardless of the media used, and 1hr treated samples had similar gene expression levels. There also wasn't a big difference between 15hr and 30hr mTOR-inhibited samples, while the differences between those that were starved were more obvious. 
+
+```{r INIplotPCA, fig.width=8, fig.height=6, fig.cap="*PCA of (A) all HeLa samples, (B) only control HeLa samples, (C) starved samples and corresponding controls and (D) mTOR-inhibited samples and corresponding controls. Plots were colored by time point while shape represent shapes*"}
+overall <- hela_pca$x %>%
+  as.data.frame() %>%
+  rownames_to_column("sample") %>%
+  left_join(hela_metadata) %>%
+  as_tibble() %>%
+  ggplot(aes(PC1, PC2, color = TIME, fill = TIME, shape = TREAT)) +
+  geom_point() +
+  scale_colour_manual(values = c("gray80", "skyblue1", "dodgerblue1", "navyblue")) +
+  scale_shape_manual(values = c(17,1,2,19)) +
+  coord_cartesian(ylim = c(-50,30), 
+                  xlim = c(-80, 35)) +
+  guides(fill = FALSE) %>%
+  labs(
+    x = paste0("PC1 (", hela_pcaVars[["PC1"]], ")"),
+    y = paste0("PC2 (", hela_pcaVars[["PC2"]], ")"),
+    colour = "TIME"
+  )
+# Control cells
+contr <- hela_pca$x %>%
+  as.data.frame() %>%
+  rownames_to_column("sample") %>%
+  left_join(hela_metadata) %>%
+  dplyr::filter(TREAT %in% c("DMSO", "DMEM")) %>%
+  as_tibble() %>%
+  ggplot(aes(PC1, PC2, shape = TREAT)) +
+  geom_point(aes(color = TIME)) +
+  scale_colour_manual(values = c("gray80","navyblue")) +
+  scale_shape_manual(values = c(1,2)) +
+  coord_cartesian(ylim = c(-50,30), 
+                  xlim = c(-80, 35)) +
+  guides(fill = FALSE) %>%
+  labs(
+    x = paste0("PC1 (", hela_pcaVars[["PC1"]], ")"),
+    y = paste0("PC2 (", hela_pcaVars[["PC2"]], ")"),
+    colour = "TIME"
+  )
+# EBSS vs DMEM
+ebss <- hela_pca$x %>%
+  as.data.frame() %>%
+  rownames_to_column("sample") %>%
+  left_join(hela_metadata) %>%
+  dplyr::filter(TREAT %in% c("EBSS", "DMEM")) %>%
+  as_tibble() %>%
+  ggplot(aes(PC1, PC2, color = TIME, fill = TIME, shape = TREAT)) +
+  geom_point() +
+  scale_colour_manual(values = c("gray80", "skyblue1", "dodgerblue1", "navyblue")) +
+  scale_shape_manual(values = c(1,19)) +
+  coord_cartesian(ylim = c(-50,30), 
+                  xlim = c(-80, 35)) +
+  guides(fill = FALSE) %>%
+  labs(
+    x = paste0("PC1 (", hela_pcaVars[["PC1"]], ")"),
+    y = paste0("PC2 (", hela_pcaVars[["PC2"]], ")"),
+    colour = "TIME"
+  )
+# AZD vs DMSO
+azd8055 <- hela_pca$x %>%
+  as.data.frame() %>%
+  rownames_to_column("sample") %>%
+  left_join(hela_metadata) %>%
+  dplyr::filter(TREAT %in% c("AZD8055", "DMSO")) %>%
+  as_tibble() %>%
+  ggplot(aes(PC1, PC2, color = TIME, fill = TIME, shape = TREAT)) +
+  geom_point() +
+  scale_colour_manual(values = c("gray80", "skyblue1", "dodgerblue1", "navyblue")) +
+  scale_shape_manual(values = c(17,2)) +
+  coord_cartesian(ylim = c(-50,30), 
+                  xlim = c(-80, 35)) +
+  guides(fill = FALSE) %>%
+  labs(
+    x = paste0("PC1 (", hela_pcaVars[["PC1"]], ")"),
+    y = paste0("PC2 (", hela_pcaVars[["PC2"]], ")"),
+    colour = "TIME"
+  )
+plot_grid(
+  plot_grid(
+  overall + theme(legend.position="none"),
+  contr+ theme(legend.position="none"),
+  ebss+ theme(legend.position="none"), 
+  azd8055+ theme(legend.position="none") ,
+  labels = c("A", "B", "C", "D")
+),
+get_legend(overall),
+rel_widths = c(8,1)
+)
+```
+
+
+
+
+In the pervious quality control step, it was identified that gene-length was strongly correlated with PC1 and GC content had a relatively strong correlation with both PC1 and PC2. Therefore, *conditional-quantile normalisation* was performed using the `cqn` package, which adds `glm.offset` values to the origianl `hela_dgeList` object and calculates all dispersion estimates. 
+
+## Conditional quantile normalisation
+```{r gcCqn}
+hela_gcCqn <- cqn(
+  counts = hela_dgeList$counts,
+  x = hela_dgeList$genes$gc_content,
+  lengths = hela_dgeList$genes$length,
+  sizeFactors = hela_dgeList$samples$lib.size
+)
+# Offset was added to original dgelist
+hela_dgeList$offset <- hela_gcCqn$glm.offset 
+```
+
+```{r cpmPostNorm}
+hela_cpmPostNorm <- hela_gcCqn %>%
+  with(y + offset)
+```
+
+
+# Control samples
+
+It is expected that none or negligibal number of genes will appear to be differentially expressed between two control groups (DMSO & DMEM cells). In addition, there shouldn't be any gene expression changes between 0hr control cells and the 30hrs control cell. Hence, a 2 x 2 factorial model was built to test the effects of different media and time. The design matrix is visualised as a heatmap. 
+
+```{r d}
+d <- model.matrix(
+  ~ (TREAT + TIME)^2,
+  data = dplyr::filter(hela_dgeList$samples, TREAT %in% c("DMEM", "DMSO")) %>% 
+    droplevels()) %>%
+  set_colnames(str_remove(colnames(.), "TREAT|TIME"))
+```
+
+```{r mmVisualisation, fig.height=3, fig.width=6, fig.cap = "*Visualisation of the design matrix d*"}
+pheatmap(d,
+         cluster_cols = FALSE, 
+         cluster_rows = FALSE,
+         annotation_row = hela_dgeList$samples %>%
+           dplyr::filter(TREAT %in% c("DMEM", "DMSO")) %>%
+           unite("GROUP", c("TREAT", "TIME"))%>%
+           .[,"GROUP", drop = FALSE],
+         legend = FALSE)
+```
+
+```{r estimate overdispersion}
+helaContr_cell <- grepl(paste(dplyr::filter(hela_metadata, TREAT %in% c("DMEM", "DMSO"))$sample, collapse="|"),hela_dgeList$samples$sample)
+helaContro_dgeList <- hela_dgeList[,helaContr_cell]
+helaContro_dgeList%<>% estimateDisp(design = d)
+```
+
+
+```{r fitModel}
+alpha <- 0.01
+minLfc <- log2(2)
+fit <- glmFit(helaContro_dgeList)
+topTables_helaContr <- colnames(d)[2:4] %>%
+  sapply(function(x){
+    glmLRT(fit, coef = x) %>%
+      topTags(n = Inf) %>%
+      .[["table"]] %>%
+      as_tibble() %>%
+      arrange(PValue) %>%
+      dplyr::select(
+        gene_id, gene_name, logFC, logCPM, PValue, FDR, everything()  
+      ) %>%
+      mutate(
+        coef = x,
+        bonfP = p.adjust(PValue, "bonf"),
+        DE = case_when(
+          bonfP < alpha ~ TRUE,
+          FDR < alpha & abs(logFC) > minLfc ~ TRUE
+        ),
+        DE = ifelse(is.na(DE), FALSE, DE)
+      )
+  }, simplify = FALSE)
+# write_rds(topTables_helaContr, 
+#           path = here::here("output/DEoutput/topTables_helaContr.rds"), 
+#           compress = "gz")
+```
+
+Models were fit using the negative-binomial approaches of `glmFit()`.
+Top Tables were then obtained using likelihood-ratio tests in `glmLRT()`.
+These test the standard $H_0$ that the true value of the estimated model coefficient is zero.
+These model coefficients effectively compares:
+1. 0hr DMSO treated cells vs 0H DMEM treated cells
+2. 0hs DMSO treated cells vs  30hrs DMSO treated cells
+3. Difference between 0 and 30 hrs DMSO treated cells vs differences between 0 and 30 hrs DMEM treated cells
+
+Genes were considered to be DE using:
+a. A Bonferroni-adjusted p-value < `r alpha`
+b. An FDR-adjusted p-value < `r alpha` along with an estimated logFC outside of the range $\pm \log_2(`r 2^minLfc`)$.
+
+Using these criteria, the following initial DE gene-sets were defined among control samples:
+
+```{r printInitialDE, results='asis'}
+topTables_helaContr %>%
+  lapply(dplyr::filter, DE) %>% 
+  vapply(nrow, integer(1)) %>%
+  pander()
+```
+
+```{r contro_deGenes}
+# contro_deGenes <- topTables_helaContr %>%
+#   lapply(dplyr::filter, DE) %>%
+#   lapply(magrittr::extract2, "gene_id") %>%
+#   unlist(use.names = FALSE) %>%
+#   unique()
+# contro_deGenes %>% 
+#   as.data.frame() %>%
+#   write_csv(
+#     path = here::here("output/DEremove_Hela.csv")
+#   )
+```
+
+The number of DEGs detected between control groups were negligibly small, which was expected. All genes came up to be differentially expressed in this step will be excluded from downstream analysis. 
+
+# Auophagy flux
+
+As part of the study, the autophagic flux of cells were measured with an tandem-fluorescent LC3 assay (tf-LC3), which output a RG ratio for each sample and higher ratio implies higher autophagic activity. 
+
+In both control arms, autophagic activities of cells barely changed through the 30hr time course. mTOR-inhibited cells' autophagic activity increased steadily from 1hr to 15hr but plateaued after that. Starved cells, on the other hand, experienced dramatic rise in autophagic flux for the entire duration. 
+
+```{r RGplotPCA, fig.width=6, fig.height=4, fig.cap="*Plot of Hela cells' RG ratio (autophagic flux)*"}
+hela_metadata %>%
+  ggplot(aes(as.numeric(as.character(TIME)), RG.ratio, colour = TREAT)) +
+  stat_summary(
+        fun = mean,
+        geom='line',
+        aes(color=TREAT)) +
+    stat_summary(
+        fun=mean,
+        geom='point') +
+    stat_summary(
+        fun.data=mean_cl_boot,
+        geom='errorbar',
+        width=0.5) +
+  scale_color_manual(values = treatCols, 
+                     name = "Treatment") + 
+  ylab("Time (hrs)")
+```

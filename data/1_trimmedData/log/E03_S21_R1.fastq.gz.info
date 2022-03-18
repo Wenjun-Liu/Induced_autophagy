@@ -1,0 +1,115 @@
+This is cutadapt 1.14 with Python 2.7.13
+Command line parameters: -a AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC -A AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT -o /data/biohub/202003_Ville_RNAseq/data/1_trimmedData/fastq/E03_S21_R1.fastq.gz -p /data/biohub/202003_Ville_RNAseq/data/1_trimmedData/fastq/E03_S21_R2.fastq.gz -m 35 --trim-n --max-n=1 --nextseq-trim=30 /data/biohub/202003_Ville_RNAseq/data/0_rawData/fastq/E03_S21_R1.fastq.gz /data/biohub/202003_Ville_RNAseq/data/0_rawData/fastq/E03_S21_R2.fastq.gz
+Trimming 2 adapters with at most 10.0% errors in paired-end mode ...
+Finished in 7510.84 s (54 us/read; 1.11 M reads/minute).
+
+=== Summary ===
+
+Total read pairs processed:        138,419,282
+  Read 1 with adapter:               2,864,596 (2.1%)
+  Read 2 with adapter:               4,492,048 (3.2%)
+Pairs that were too short:             939,697 (0.7%)
+Pairs with too many N:                  31,359 (0.0%)
+Pairs written (passing filters):   137,448,226 (99.3%)
+
+Total basepairs processed: 37,816,678,359 bp
+  Read 1: 18,905,389,486 bp
+  Read 2: 18,911,288,873 bp
+Total written (filtered):  37,216,729,265 bp (98.4%)
+  Read 1: 18,605,028,083 bp
+  Read 2: 18,611,701,182 bp
+
+=== First read: Adapter 1 ===
+
+Sequence: AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC; Type: regular 3'; Length: 34; Trimmed: 2864596 times.
+
+No. of allowed errors:
+0-9 bp: 0; 10-19 bp: 1; 20-29 bp: 2; 30-34 bp: 3
+
+Bases preceding removed adapters:
+  A: 24.8%
+  C: 33.4%
+  G: 26.3%
+  T: 15.5%
+  none/other: 0.0%
+
+Overview of removed sequences
+length	count	expect	max.err	error counts
+3	2192906	2162801.3	0	2192906
+4	522580	540700.3	0	522580
+5	126162	135175.1	0	126162
+8	1960	2112.1	0	1960
+9	613	528.0	0	613
+10	799	132.0	1	0 799
+11	1457	33.0	1	521 936
+12	419	8.3	1	0 419
+13	139	2.1	1	30 109
+14	3082	0.5	1	143 2939
+15	357	0.1	1	73 284
+16	3555	0.0	1	162 3393
+17	1986	0.0	1	114 1872
+18	4633	0.0	1	0 4630 3
+19	72	0.0	1	12 53 7
+20	540	0.0	2	28 67 445
+21	249	0.0	2	8 31 210
+22	173	0.0	2	0 5 168
+23	199	0.0	2	16 16 167
+24	1003	0.0	2	14 80 909
+25	608	0.0	2	4 44 560
+26	234	0.0	2	2 27 205
+27	436	0.0	2	2 10 424
+28	147	0.0	2	0 1 146
+29	115	0.0	2	0 1 111 3
+30	41	0.0	3	0 0 37 4
+31	79	0.0	3	0 0 4 75
+32	19	0.0	3	0 0 0 19
+33	30	0.0	3	0 0 13 17
+34	3	0.0	3	0 0 0 3
+
+=== Second read: Adapter 2 ===
+
+Sequence: AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT; Type: regular 3'; Length: 33; Trimmed: 4492048 times.
+
+No. of allowed errors:
+0-9 bp: 0; 10-19 bp: 1; 20-29 bp: 2; 30-33 bp: 3
+
+Bases preceding removed adapters:
+  A: 33.5%
+  C: 26.5%
+  G: 26.4%
+  T: 13.5%
+  none/other: 0.0%
+
+Overview of removed sequences
+length	count	expect	max.err	error counts
+3	3659357	2162801.3	0	3659357
+4	708435	540700.3	0	708435
+5	86170	135175.1	0	86170
+8	12232	2112.1	0	12232
+9	1063	528.0	0	1063
+10	957	132.0	1	0 957
+11	3631	33.0	1	1291 2340
+12	505	8.3	1	0 505
+13	3702	2.1	1	1376 2326
+14	1123	0.5	1	0 1123
+15	1335	0.1	1	259 1076
+16	5330	0.0	1	752 4578
+17	2760	0.0	1	0 2760
+18	338	0.0	1	133 201 4
+19	789	0.0	1	0 780 9
+20	483	0.0	2	67 79 337
+21	822	0.0	2	75 122 625
+22	243	0.0	2	0 27 216
+23	165	0.0	2	0 0 165
+24	19	0.0	2	0 5 14
+25	557	0.0	2	39 40 478
+26	349	0.0	2	16 37 296
+27	1045	0.0	2	6 52 987
+28	27	0.0	2	0 4 18 5
+29	193	0.0	2	1 8 170 14
+30	26	0.0	3	0 2 5 19
+31	324	0.0	3	0 0 7 317
+32	32	0.0	3	0 0 0 32
+33	33	0.0	3	0 0 2 31
+34	3	0.0	3	0 0 0 3
+

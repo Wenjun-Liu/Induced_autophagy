@@ -1,0 +1,1586 @@
+---
+title: "Differential Expression Analysis"
+author: "Wenjun Liu"
+date: "12/11/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+    autodep = TRUE,
+	echo = TRUE,
+	warning = FALSE,
+	message = FALSE
+)
+```
+
+#Set libaries
+```{r loadPackages}
+library(ngsReports)
+library(tidyverse)
+library(magrittr)
+library(edgeR)
+library(AnnotationHub)
+library(ensembldb)
+library(scales)
+library(pander)
+library(cowplot)
+library(corrplot)
+library(ggrepel)
+library(RColorBrewer)
+library(pheatmap)
+library(UpSetR)
+library(msigdbr)
+library(GO.db)
+library(goseq)
+library(kableExtra)
+library(plotly)
+library(reshape2)
+library(org.Hs.eg.db)
+library(cqn)
+library(Numero)
+```
+
+```{r setOpts}
+theme_set(theme_bw())
+panderOptions("table.split.table", Inf)
+panderOptions("table.style", "rmarkdown")
+panderOptions("big.mark", ",")
+```
+
+```{r annotationSetup}
+ah <- AnnotationHub() %>%
+	subset(species == "Homo sapiens") %>%
+	subset(rdataclass == "EnsDb")
+ensDB <- ah[["AH75011"]]
+genes(ensDB)
+grTrans <- transcripts(ensDB)
+trLengths <- exonsBy(ensDB, "tx") %>%
+	width() %>%
+	vapply(sum, integer(1))
+mcols(grTrans)$length <- trLengths[names(grTrans)]
+```
+
+```{r geneAnnotation}
+gcGene <- grTrans %>%
+  mcols() %>%
+  as.data.frame() %>%
+  dplyr::select(gene_id, tx_id, gc_content, length) %>%
+  as_tibble() %>%
+  group_by(gene_id) %>%
+  summarise(
+    gc_content = sum(gc_content*length) / sum(length),
+    length = ceiling(median(length))
+  )
+grGenes <- genes(ensDB)
+mcols(grGenes) %<>%
+  as.data.frame() %>%
+  left_join(gcGene) %>%
+  as.data.frame() %>%
+  DataFrame()
+```
+
+Metadata of each fastq file and each sample was loaded. 
+
+```{r metaData}
+metadata <- here::here("data", "metadata.txt") %>%
+  read.table(header = TRUE, sep = "\t",stringsAsFactors = FALSE) %>% 
+  as_tibble()%>%
+  mutate_at(vars(one_of(c("CELL", "TREAT","CONTR", "TIME"))), as.factor)
+filename <- here::here("data", "filename.txt") %>%
+  read.table(header = TRUE, sep = "\t",stringsAsFactors = FALSE) %>% 
+  as_tibble()%>%
+  mutate_at(vars(one_of(c("CELL", "TREAT","CONTR", "TIME"))), as.factor) %>%
+  mutate(TREATED = ifelse(CONTR == 0,1,0))
+labels <- structure(
+  filename$sample,
+  names = filename$Filename
+)
+#extract metadata for each cell line
+hela_metadata <- metadata %>%
+  dplyr::filter(CELL == "HeLa.tfLC3")
+SH_metadata <- metadata %>%
+  dplyr::filter(CELL == "SH-SY5Y.tfLC3")  
+hek_metadata <- metadata %>%
+  dplyr::filter(CELL == "HEK293.tfLC3")  
+```
+
+Raw read counts were read in and a separate `DGElist` object was created for each cell line. As observed in the [PCA plot of all control samples ](HeLa_QC.html## Cell line labelling checking), the cell-line effect was dominating the variability in this dataset. Therefore, all the downstream analyses were performed individually within each cell line, before results were integrated. 
+
+```{r dgeList}
+minCPM <- 1.5
+minSamples <- 3
+dgeList <- here::here("data", "2_alignedData", "featureCounts", "genes.out") %>%
+  read_delim(delim = "\t") %>%
+  set_names(basename(names(.))) %>%
+  as.data.frame() %>%
+  column_to_rownames("Geneid") %>%
+  as.matrix() %>% 
+  set_colnames(str_remove(colnames(.), "Aligned.sortedByCoord.out.bam")) %>%
+  DGEList(
+    samples = tibble(sample = colnames(.)) %>%
+      left_join(dplyr::filter(filename, read == "R1")),
+    genes = grGenes[rownames(.)] %>%
+      as.data.frame() %>%
+      dplyr::select(
+        chromosome = seqnames, start, end, 
+        gene_id, gene_name, gene_biotype, description, 
+        entrezid, gc_content, length
+      )
+  ) %>%
+  .[!grepl("rRNA", .$genes$gene_biotype),] %>%
+  calcNormFactors()
+```
+
+
+## HeLa 
+
+A `DGEList` was created for HeLa samples and conditional quantile normalisation (cqn) was applied the noises introduced by systematic artefacts: GC content and gene length.  
+
+```{r hela_dgeList}
+hela_cell <- grepl(paste(unique(hela_metadata$sample), collapse="|"),dgeList$samples$sample)  
+hela_dgeList <- dgeList[,hela_cell]
+hela_dgeList %<>% .[rowSums(cpm(.) >= minCPM) >= minSamples,]
+hela_thrownGene <- setdiff(dgeList$genes$gene_id, hela_dgeList$genes$gene_id)
+```
+
+```{r hela_gcCqn}
+hela_gcCqn <- cqn(
+  counts = hela_dgeList$counts,
+  x = hela_dgeList$genes$gc_content,
+  lengths = hela_dgeList$genes$length,
+  sizeFactors = hela_dgeList$samples$lib.size
+)
+# Offset was added to original dgelist
+hela_dgeList$offset <- hela_gcCqn$glm.offset 
+```
+
+Hence samples treated between by two different autophagy-inducing treatments fell into two distinct cluster in PCA plots across all cell lines, analyses were also performed separately for each treatment.
+
+### AZD8055
+
+Hence there are two factors that are of interests: treatment and time, those two factors were combined into one to create model matrix (visualised as a heatmap shown below).
+
+```{r d_hela_AZD}
+hela_dgeList$samples$timeGroups <- paste(hela_dgeList$samples$TREAT, hela_dgeList$samples$TIME, sep = "_") %>%
+  as.factor()
+hela_dgeList$samples$timeGroups <- relevel(hela_dgeList$samples$timeGroups, ref = "DMSO_0")
+d_hela_AZD <- model.matrix(~ timeGroups, data = hela_dgeList$samples %>%
+                             dplyr::filter(TREAT %in% c("DMSO", "AZD8055")) %>%
+                             droplevels())
+d_hela_AZD <- d_hela_AZD %>%
+  set_colnames(c("Intercept","AZD1", "AZD15", "AZD30","DMSO30"))
+hela_AZD <- grepl(paste(dplyr::filter(hela_metadata, TREAT %in% c("AZD8055", "DMSO"))$sample, collapse="|"),hela_dgeList$samples$sample)
+helaAZD_dgeList <- hela_dgeList[,hela_AZD]
+helaAZD_dgeList %<>% estimateDisp(design = d_hela_AZD)
+```
+
+```{r dmVisualisation1, fig.height=3, fig.width=6, fig.cap = "*Visualisation of the pairwise design matrix for AZD8055 treatment*"}
+d_hela_AZD %>%
+  set_colnames(c("Intercept","Treat_1hr", "Treat_15hrs", "Treat_30hrs","Control_30hrs")) %>%
+  as.data.frame() %>%
+  rownames_to_column("sample") %>%
+  left_join(metadata %>%
+              mutate(group = paste(TREAT, TIME, sep= "_")) %>%
+              dplyr::select(group, sample)) %>%
+  mutate(rownames = paste(sample, group, sep = ":")) %>%
+  dplyr::select(-c("group", "sample")) %>%
+  column_to_rownames("rownames") %>%
+  pheatmap(cluster_cols = FALSE, 
+         cluster_rows = TRUE,
+         legend = FALSE, 
+         show_rownames = TRUE, 
+         fontsize_col = 12, 
+         angle_col = "0")
+```
+
+```{r MakeContrast_AZD}
+contrast_AZD <- makeContrasts(AZD1vsContr = AZD1,
+                              AZD15vsContr = AZD15,
+                              AZD30vsContr = AZD30,
+                              DMSO30vs0 = DMSO30,
+                              levels = d_hela_AZD)
+```
+
+Models were fit using the negative-binomial approaches of `glmQLFit()`.
+Top Tables were then obtained using quasi-likelihood (QL) F-test tests against the default fold-change threshold in `glmTreat()`.
+
+```{r topTables_helaAZD}
+fit_helaAZD <- glmQLFit(helaAZD_dgeList)
+topTables_helaAZD  <- colnames(contrast_AZD) %>%
+    sapply(function(x){
+      glmTreat(fit_helaAZD, contrast = contrast_AZD[,x]) %>%
+      topTags(n = Inf) %>%
+      .[["table"]] %>%
+      as_tibble() %>%
+      arrange(PValue) %>%
+      dplyr::select(
+        gene_id, gene_name, logFC, logCPM, PValue, FDR, everything()) %>%
+      mutate(
+        coef = x,
+        bonfP = p.adjust(PValue, "bonf")
+      )
+  }, simplify = FALSE)
+```
+
+The numbers of genes with FDR < 0.05 in each group were:
+
+```{r DE_helaAZD}
+topTables_helaAZD %>%
+  lapply(dplyr::filter, FDR < 0.05) %>%
+  vapply(nrow, integer(1)) %>%
+  pander()
+```
+
+```{r}
+
+```
+
+### EBSS
+```{r d_hela_EBSS}
+hela_dgeList$samples$timeGroups <- relevel(hela_dgeList$samples$timeGroups, ref = "DMEM_0")
+d_hela_EBSS <- model.matrix(~ timeGroups, data = hela_dgeList$samples %>%
+                             dplyr::filter(TREAT %in% c("DMEM", "EBSS")) %>%
+                             droplevels())
+d_hela_EBSS <- d_hela_EBSS %>%
+  set_colnames(c("Intercept","DMEM30","EBSS1", "EBSS15", "EBSS30"))
+hela_EBSS <- grepl(paste(dplyr::filter(hela_metadata, TREAT %in% c("EBSS", "DMEM"))$sample, collapse="|"),hela_dgeList$samples$sample)
+helaEBSS_dgeList <- hela_dgeList[,hela_EBSS]
+helaEBSS_dgeList %<>% estimateDisp(design = d_hela_EBSS)
+```
+
+```{r dmVisualisation1, fig.height=3, fig.width=6, fig.cap = "*Visualisation of the pairwise design matrix for EBSS8055 treatment*"}
+pheatmap(d_hela_EBSS,
+         cluster_cols = FALSE, 
+         cluster_rows = FALSE,
+         legend = FALSE)
+```
+
+```{r MakeContrast_EBSS}
+contrast_EBSS <- makeContrasts(EBSS1vsContr = EBSS1,
+                               EBSS15vsContr = EBSS15,
+                               EBSS30vsContr = EBSS30,
+                               DMEM30vs0 = DMEM30,
+                               levels = d_hela_EBSS)
+```
+
+```{r topTables_helaEBSS}
+fit_helaEBSS <- glmQLFit(helaEBSS_dgeList)
+topTables_helaEBSS  <- colnames(contrast_EBSS) %>%
+  sapply(function(x){
+    glmTreat(fit_helaEBSS, contrast = contrast_EBSS[,x]) %>%
+      topTags(n = Inf) %>%
+      .[["table"]] %>%
+      as_tibble() %>%
+      arrange(PValue) %>%
+      dplyr::select(
+        gene_id, gene_name, logFC, logCPM, PValue, FDR, everything()) %>%
+      mutate(
+        coef = x,
+        bonfP = p.adjust(PValue, "bonf"),
+        DE = case_when(
+          bonfP < alpha ~ TRUE,
+          FDR < alpha & abs(logFC) > minLfc ~ TRUE
+        ),
+        DE = ifelse(is.na(DE), FALSE, DE)
+      )
+  }, simplify = FALSE)
+topTables_helaEBSS %>%
+  lapply(dplyr::filter, DE) %>% 
+  vapply(nrow, integer(1)) %>%
+  pander()
+```
+
+```{r deGenes_helaEBSS}
+helaEBSS_DE <- topTables_helaEBSS[c("EBSS1vsContr","EBSS15vsContr","EBSS30vsContr")] %>%
+lapply(dplyr::filter, DE) %>%
+bind_rows() %>%
+extract2("gene_id")
+deGenes_helaEBSS <- topTables_helaEBSS[c("EBSS15vsContr","EBSS30vsContr")] %>%
+  lapply(dplyr::filter, gene_id %in% helaEBSS_DE, FDR < 0.05) %>%
+  lapply(mutate, Direction = case_when(logFC > 0 ~ "up", logFC < 0 ~ "down")) %>%
+  lapply(mutate, dir_coef = paste(coef, Direction, sep = "_")) %>%
+  bind_rows() %>%
+  split(f = .$dir_coef) %>%
+  lapply(extract2, "gene_name")
+```
+
+```{r Genegroup_helaEBSS}
+Genegroup_helaEBSS <- list()
+OG_helaEBSS <- overlapGroups(deGenes_helaEBSS)
+Genegroup_helaEBSS[["Trans_up"]] <- Filter(function(x) attr(x, "Group") %in% c("up_down", "up_x"), OG_helaEBSS) %>%
+  unname() %>%
+  unlist() 
+Genegroup_helaEBSS[["Trans_down"]] <- Filter(function(x) attr(x, "Group") %in% c("down_up", "down_x"), OG_helaEBSS) %>%
+  unname() %>%
+  unlist() 
+Genegroup_helaEBSS[["Early_up"]] <- Filter(function(x) attr(x, "Group") %in% c("up_up"), OG_helaEBSS) %>%
+  unname() %>%
+  unlist() 
+Genegroup_helaEBSS[["Early_down"]] <- Filter(function(x) attr(x, "Group") %in% c("down_down"), OG_helaEBSS) %>%
+  unname() %>%
+  unlist() 
+Genegroup_helaEBSS[["Late_down"]] <- Filter(function(x) attr(x, "Group") %in% c("x_down"), OG_helaEBSS) %>%
+  unname() %>%
+  unlist() 
+Genegroup_helaEBSS[["Late_up"]] <- Filter(function(x) attr(x, "Group") %in% c("x_up"), OG_helaEBSS) %>%
+  unname() %>%
+  unlist()
+Genegroup_helaEBSS %>% 
+  vapply(length, integer(1)) %>% 
+  pander()
+```
+
+```{r deGenes_helaEBSScontr}
+deGenes_helaEBSSdmem <- topTables_helaEBSS[c("DMEM30vs0")] %>%
+  lapply(dplyr::filter, gene_id %in% helaEBSS_DE, FDR < 0.05) %>%
+  lapply(mutate, Direction = case_when(logFC > 0 ~ "up", logFC < 0 ~ "down")) %>%
+  lapply(mutate, dir_coef = paste(coef, Direction, sep = "_")) %>%
+  bind_rows() %>%
+  split(f = .$dir_coef) %>%
+  lapply(extract2, "gene_name")
+sapply(names(deGenes_helaEBSSdmem ), function(x){
+  Genegroup_helaEBSS %>%
+    lapply(intersect, deGenes_helaEBSSdmem [[x]]) %>%
+    vapply(length, integer(1))
+}, simplify = FALSE)
+```
+
+## SH-SY5Y
+
+Extract SH dgeList
+```{r SH_dgeList}
+SH_cell <- grepl(paste(unique(SH_metadata$sample), collapse="|"),dgeList$samples$sample)  
+SH_dgeList <- dgeList[,SH_cell]
+SH_dgeList %<>% .[rowSums(cpm(.) >= minCPM) >= minSamples,]
+SH_thrownGene <- setdiff(dgeList$genes$gene_id, SH_dgeList$genes$gene_id)
+```
+
+```{r SH_gcCqn}
+SH_gcCqn <- cqn(
+  counts = SH_dgeList$counts,
+  x = SH_dgeList$genes$gc_content,
+  lengths = SH_dgeList$genes$length,
+  sizeFactors = SH_dgeList$samples$lib.size
+)
+# Offset was added to original dgelist
+SH_dgeList$offset <- SH_gcCqn$glm.offset 
+```
+
+### AZD8055
+```{r d_SH_AZD}
+SH_dgeList$samples$timeGroups <- paste(SH_dgeList$samples$TREAT, SH_dgeList$samples$TIME, sep = "_") %>%
+  as.factor()
+SH_dgeList$samples$timeGroups <- relevel(SH_dgeList$samples$timeGroups, ref = "DMSO_0")
+d_SH_AZD <- model.matrix(~ timeGroups, data = SH_dgeList$samples %>%
+                             dplyr::filter(TREAT %in% c("DMSO", "AZD8055")) %>%
+                             droplevels())
+d_SH_AZD <- d_SH_AZD %>%
+  set_colnames(c("Intercept","AZD1", "AZD15", "AZD30","DMSO15","DMSO30"))
+SH_AZD <- grepl(paste(dplyr::filter(SH_metadata, TREAT %in% c("AZD8055", "DMSO"))$sample, collapse="|"),SH_dgeList$samples$sample)
+SHAZD_dgeList <- SH_dgeList[,SH_AZD]
+SHAZD_dgeList %<>% estimateDisp(design = d_SH_AZD)
+```
+
+
+```{r MakeContrast_AZD}
+contrast_AZD <- makeContrasts(AZD1vsContr = AZD1,
+                              AZD15vsContr = AZD15,
+                              AZD30vsContr = AZD30,
+                              DMSO15vs0 = DMSO15,
+                              DMSO30vs0 = DMSO30,
+                              levels = d_SH_AZD)
+```
+
+```{r topTables_SHAZD}
+fit_SHAZD <- glmQLFit(SHAZD_dgeList)
+topTables_SHAZD  <- colnames(contrast_AZD) %>%
+  sapply(function(x){
+    glmTreat(fit_SHAZD, contrast = contrast_AZD[,x]) %>%
+      topTags(n = Inf) %>%
+      .[["table"]] %>%
+      as_tibble() %>%
+      arrange(PValue) %>%
+      dplyr::select(
+        gene_id, gene_name, logFC, logCPM, PValue, FDR, everything()) %>%
+      mutate(
+        coef = x,
+        bonfP = p.adjust(PValue, "bonf"),
+        DE = case_when(
+          bonfP < alpha ~ TRUE,
+          FDR < alpha & abs(logFC) > minLfc~ TRUE
+        ),
+        DE = ifelse(is.na(DE), FALSE, DE)
+      )
+  }, simplify = FALSE)
+topTables_SHAZD %>%
+  lapply(dplyr::filter, DE) %>% 
+  vapply(nrow, integer(1)) 
+# write_rds(topTables_SHAZD, 
+#           path = here::here("output/topTables_SHAZD.rds"), 
+#           compress = "gz")
+```
+
+```{r SHAZD_upset2}
+SHAZD_DE <- topTables_SHAZD[c("AZD1vsContr","AZD30vsContr", "AZD15vsContr")] %>%
+  lapply(dplyr::filter, DE) %>%
+  bind_rows() %>%
+  extract2("gene_id")
+
+topTables_SHAZD[c("AZD30vsContr", "AZD15vsContr") ]%>%
+  lapply(dplyr::filter, gene_id %in% SHAZD_DE, FDR < 0.05) %>%
+  lapply(mutate, Direction = case_when(logFC > 0 ~ "up", logFC < 0 ~ "down")) %>%
+  lapply(mutate, dir_coef = paste(coef, Direction, sep = "_")) %>%
+  bind_rows() %>%
+  split(f = .$dir_coef) %>%
+  lapply(extract2, "gene_id") %>%
+  fromList() %>%
+  upset(nsets = ncol(.))
+```
+
+```{r deGenes_SHAZD}
+deGenes_SHAZD <- topTables_SHAZD[c("AZD15vsContr","AZD30vsContr")] %>%
+  lapply(dplyr::filter, gene_id %in% SHAZD_DE, FDR < 0.05) %>%
+  lapply(mutate, Direction = case_when(logFC > 0 ~ "up", logFC < 0 ~ "down")) %>%
+  lapply(mutate, dir_coef = paste(coef, Direction, sep = "_")) %>%
+  bind_rows() %>%
+  split(f = .$dir_coef) %>%
+  lapply(extract2, "gene_name")
+```
+
+```{r Genegroup_SHAZD}
+Genegroup_SHAZD <- list()
+OG_SHAZD <- overlapGroups(deGenes_SHAZD)
+Genegroup_SHAZD[["Trans_up"]] <- Filter(function(x) attr(x, "Group") %in% c("up_down", "up_x"), OG_SHAZD) %>%
+  unname() %>%
+  unlist() 
+Genegroup_SHAZD[["Trans_down"]] <- Filter(function(x) attr(x, "Group") %in% c("down_up", "down_x"), OG_SHAZD) %>%
+  unname() %>%
+  unlist() 
+Genegroup_SHAZD[["Early_up"]] <- Filter(function(x) attr(x, "Group") %in% c("up_up"), OG_SHAZD) %>%
+  unname() %>%
+  unlist() 
+Genegroup_SHAZD[["Early_down"]] <- Filter(function(x) attr(x, "Group") %in% c("down_down"), OG_SHAZD) %>%
+  unname() %>%
+  unlist() 
+Genegroup_SHAZD[["Late_down"]] <- Filter(function(x) attr(x, "Group") %in% c("x_down"), OG_SHAZD) %>%
+  unname() %>%
+  unlist() 
+Genegroup_SHAZD[["Late_up"]] <- Filter(function(x) attr(x, "Group") %in% c("x_up"), OG_SHAZD) %>%
+  unname() %>%
+  unlist()
+Genegroup_SHAZD %>% 
+  vapply(length, integer(1)) %>% 
+  pander()
+
+```
+
+
+```{r deGenes_SHAZDcontr}
+deGenes_SHAZDdmso <- topTables_SHAZD[c("DMSO30vs0", "DMSO15vs0")] %>%
+  lapply(dplyr::filter, gene_id %in% SHAZD_DE, FDR < 0.05) %>%
+  lapply(mutate, Direction = case_when(logFC > 0 ~ "up", logFC < 0 ~ "down")) %>%
+  lapply(mutate, dir_coef = paste(coef, Direction, sep = "_")) %>%
+  bind_rows() %>%
+  split(f = .$dir_coef) %>%
+  lapply(extract2, "gene_name")
+sapply(names(deGenes_SHAZDdmso ), function(x){
+  Genegroup_SHAZD %>%
+    lapply(intersect, deGenes_SHAZDdmso [[x]]) %>%
+    vapply(length, integer(1))
+}, simplify = FALSE)
+```
+
+### EBSS
+```{r d_SH_EBSS}
+SH_dgeList$samples$timeGroups <- relevel(SH_dgeList$samples$timeGroups, ref = "DMEM_0")
+d_SH_EBSS <- model.matrix(~ timeGroups, data = SH_dgeList$samples %>%
+                              dplyr::filter(TREAT %in% c("DMEM", "EBSS")) %>%
+                              droplevels())
+d_SH_EBSS <- d_SH_EBSS %>%
+  set_colnames(c("Intercept","DMEM15","DMEM30","EBSS1", "EBSS15", "EBSS30"))
+SH_EBSS <- grepl(paste(dplyr::filter(SH_metadata, TREAT %in% c("EBSS", "DMEM"))$sample, collapse="|"),SH_dgeList$samples$sample)
+SHEBSS_dgeList <- SH_dgeList[,SH_EBSS]
+SHEBSS_dgeList %<>% estimateDisp(design = d_SH_EBSS)
+```
+
+
+```{r MakeContrast_EBSS}
+contrast_EBSS <- makeContrasts(EBSS1vsContr = EBSS1,
+                               EBSS15vsContr = EBSS15,
+                               EBSS30vsContr = EBSS30,
+                               DMEM30vs0 = DMEM30,
+                               DMEM15vs0 = DMEM15,
+                               levels = d_SH_EBSS)
+```
+
+```{r topTables_SHEBSS}
+fit_SHEBSS <- glmQLFit(SHEBSS_dgeList)
+topTables_SHEBSS  <- colnames(contrast_EBSS) %>%
+  sapply(function(x){
+    glmTreat(fit_SHEBSS, contrast = contrast_EBSS[,x]) %>%
+      topTags(n = Inf) %>%
+      .[["table"]] %>%
+      as_tibble() %>%
+      arrange(PValue) %>%
+      dplyr::select(
+        gene_id, gene_name, logFC, logCPM, PValue, FDR, everything()) %>%
+      mutate(
+        coef = x,
+        bonfP = p.adjust(PValue, "bonf"),
+        DE = case_when(
+          bonfP < alpha ~ TRUE,
+          FDR < alpha & abs(logFC) > minLfc ~ TRUE
+        ),
+        DE = ifelse(is.na(DE), FALSE, DE)
+      )
+  }, simplify = FALSE)
+topTables_SHEBSS %>%
+  lapply(dplyr::filter, DE) %>% 
+  vapply(nrow, integer(1)) %>%
+  pander()
+# write_rds(topTables_SHEBSS, 
+#           path = here::here("output/topTables_SHEBSS.rds"), 
+#           compress = "gz")
+```
+
+```{r deGenes_SHEBSS}
+SHEBSS_DE <- topTables_SHEBSS[c("EBSS1vsContr","EBSS15vsContr","EBSS30vsContr")] %>%
+  lapply(dplyr::filter, DE) %>%
+  bind_rows() %>%
+  extract2("gene_id")
+deGenes_SHEBSS <- topTables_SHEBSS[c("EBSS15vsContr","EBSS30vsContr")] %>%
+  lapply(dplyr::filter, gene_id %in% SHEBSS_DE, FDR < 0.05) %>%
+  lapply(mutate, Direction = case_when(logFC > 0 ~ "up", logFC < 0 ~ "down")) %>%
+  lapply(mutate, dir_coef = paste(coef, Direction, sep = "_")) %>%
+  bind_rows() %>%
+  split(f = .$dir_coef) %>%
+  lapply(extract2, "gene_name")
+```
+
+```{r Genegroup_SHEBSS}
+Genegroup_SHEBSS <- list()
+OG_SHEBSS <- overlapGroups(deGenes_SHEBSS)
+Genegroup_SHEBSS[["Trans_up"]] <- Filter(function(x) attr(x, "Group") %in% c("up_down", "up_x"), OG_SHEBSS) %>%
+  unname() %>%
+  unlist() 
+Genegroup_SHEBSS[["Trans_down"]] <- Filter(function(x) attr(x, "Group") %in% c("down_up", "down_x"), OG_SHEBSS) %>%
+  unname() %>%
+  unlist() 
+Genegroup_SHEBSS[["Early_up"]] <- Filter(function(x) attr(x, "Group") %in% c("up_up"), OG_SHEBSS) %>%
+  unname() %>%
+  unlist() 
+Genegroup_SHEBSS[["Early_down"]] <- Filter(function(x) attr(x, "Group") %in% c("down_down"), OG_SHEBSS) %>%
+  unname() %>%
+  unlist() 
+Genegroup_SHEBSS[["Late_down"]] <- Filter(function(x) attr(x, "Group") %in% c("x_down"), OG_SHEBSS) %>%
+  unname() %>%
+  unlist() 
+Genegroup_SHEBSS[["Late_up"]] <- Filter(function(x) attr(x, "Group") %in% c("x_up"), OG_SHEBSS) %>%
+  unname() %>%
+  unlist()
+Genegroup_SHEBSS %>% 
+  vapply(length, integer(1)) %>% 
+  pander()
+```
+
+
+```{r deGenes_SHEBSScontr}
+deGenes_SHEBSSdmem <- topTables_SHEBSS[c("DMEM30vs0")] %>%
+  lapply(dplyr::filter, gene_id %in% SHEBSS_DE, FDR < 0.05) %>%
+  lapply(mutate, Direction = case_when(logFC > 0 ~ "up", logFC < 0 ~ "down")) %>%
+  lapply(mutate, dir_coef = paste(coef, Direction, sep = "_")) %>%
+  bind_rows() %>%
+  split(f = .$dir_coef) %>%
+  lapply(extract2, "gene_name")
+sapply(names(deGenes_SHEBSSdmem ), function(x){
+  Genegroup_SHEBSS %>%
+    lapply(intersect, deGenes_SHEBSSdmem [[x]]) %>%
+    vapply(length, integer(1))
+}, simplify = FALSE)
+```
+
+## HEK293
+
+Extract hek dgeList
+```{r hek_dgeList}
+hek_cell <- grepl(paste(unique(hek_metadata$sample), collapse="|"),dgeList$samples$sample)  
+hek_dgeList <- dgeList[,hek_cell]
+hek_dgeList %<>% .[rowSums(cpm(.) >= minCPM) >= minSamples,]
+hek_thrownGene <- setdiff(dgeList$genes$gene_id, hek_dgeList$genes$gene_id)
+```
+
+```{r hek_gcCqn}
+hek_gcCqn <- cqn(
+  counts = hek_dgeList$counts,
+  x = hek_dgeList$genes$gc_content,
+  lengths = hek_dgeList$genes$length,
+  sizeFactors = hek_dgeList$samples$lib.size
+)
+# Offset was added to original dgelist
+hek_dgeList$offset <- hek_gcCqn$glm.offset 
+```
+
+### AZD8055
+```{r d_hek_AZD}
+hek_dgeList$samples$timeGroups <- paste(hek_dgeList$samples$TREAT, hek_dgeList$samples$TIME, sep = "_") %>%
+  as.factor()
+hek_dgeList$samples$timeGroups <- relevel(hek_dgeList$samples$timeGroups, ref = "DMSO_0")
+d_hek_AZD <- model.matrix(~ timeGroups, data = hek_dgeList$samples %>%
+                             dplyr::filter(TREAT %in% c("DMSO", "AZD8055")) %>%
+                             droplevels())
+d_hek_AZD <- d_hek_AZD %>%
+  set_colnames(c("Intercept","AZD1", "AZD15", "AZD30","DMSO30"))
+hek_AZD <- grepl(paste(dplyr::filter(hek_metadata, TREAT %in% c("AZD8055", "DMSO"))$sample, collapse="|"),hek_dgeList$samples$sample)
+hekAZD_dgeList <- hek_dgeList[,hek_AZD]
+hekAZD_dgeList %<>% estimateDisp(design = d_hek_AZD)
+```
+
+```{r MakeContrast_AZD}
+contrast_AZD <- makeContrasts(AZD1vsContr = AZD1,
+                              AZD15vsContr = AZD15,
+                              AZD30vsContr = AZD30,
+                              DMSO30vs0 = DMSO30,
+                              levels = d_hek_AZD)
+```
+
+```{r topTables_hekAZD}
+minLfc <- log2(2)
+alpha <- 0.01
+fit_hekAZD <- glmQLFit(hekAZD_dgeList)
+topTables_hekAZD  <- colnames(contrast_AZD) %>%
+  sapply(function(x){
+    glmTreat(fit_hekAZD, contrast = contrast_AZD[,x]) %>%
+      topTags(n = Inf) %>%
+      .[["table"]] %>%
+      as_tibble() %>%
+      arrange(PValue) %>%
+      dplyr::select(
+        gene_id, gene_name, logFC, logCPM, PValue, FDR, everything()) %>%
+      mutate(
+        coef = x,
+        bonfP = p.adjust(PValue, "bonf"),
+        DE = case_when(
+          bonfP < alpha ~ TRUE,
+          FDR < alpha & abs(logFC) > minLfc~ TRUE
+        ),
+        DE = ifelse(is.na(DE), FALSE, DE)
+      )
+  }, simplify = FALSE)
+topTables_hekAZD %>%
+  lapply(dplyr::filter, DE) %>%
+  vapply(nrow, integer(1)) %>%
+  pander()
+```
+
+
+
+```{r hekAZD_upset2}
+hekAZD_DE <- topTables_hekAZD[c("AZD1vsContr","AZD30vsContr", "AZD15vsContr")] %>%
+  lapply(dplyr::filter, DE) %>%
+  bind_rows() %>%
+  extract2("gene_id")
+
+topTables_hekAZD[c("AZD30vsContr", "AZD15vsContr") ]%>%
+  lapply(dplyr::filter, gene_id %in% hekAZD_DE, FDR < 0.05) %>%
+  lapply(mutate, Direction = case_when(logFC > 0 ~ "up", logFC < 0 ~ "down")) %>%
+  lapply(mutate, dir_coef = paste(coef, Direction, sep = "_")) %>%
+  bind_rows() %>%
+  split(f = .$dir_coef) %>%
+  lapply(extract2, "gene_id") %>%
+  fromList() %>%
+  upset(nsets = ncol(.))
+```
+
+
+
+```{r plotBroaderGroup, fig.height=5, fig.width=8, fig.cap="Plots visualizing 10 DE gene expression profiles"}
+early_up <- tibble(
+  hrs15 = c(1,1,1), 
+  hrs30 = c(1,2, 0.5), 
+  group = c("A", "B", "C")
+) %>%
+  pivot_longer(cols = contains("hrs"), 
+               names_to = "Time",
+               values_to = "Expression") %>%
+  ggplot(aes(x = Time, y = Expression, group = group)) + 
+  geom_line() +
+  geom_point() + 
+  labs(y = "relative expression")+ 
+  geom_hline(yintercept=0, linetype="dashed", color = "red") + 
+  ylim(-2,2) + 
+  theme(legend.position = "none",
+        axis.title.x = element_blank())
+early_down <- tibble(
+  hrs15 = c(-1,-1,-1), 
+  hrs30 = c(-1,-2, -0.5), 
+  group = c("A", "B", "C")
+) %>%
+  pivot_longer(cols = contains("hrs"), 
+               names_to = "Time",
+               values_to = "Expression") %>%
+  ggplot(aes(x = Time, y = Expression, group = group)) + 
+  geom_line() +
+  geom_point() + 
+  labs(y = "relative expression")+ 
+  geom_hline(yintercept=0, linetype="dashed", color = "red") + 
+  ylim(-2,2) + 
+  theme(legend.position = "none",
+        axis.title.x = element_blank())
+tran_up <- tibble(
+  hrs15 = c(1,1), 
+  hrs30 = c(0,-0.5), 
+  group = c("A", "B")
+) %>%
+  pivot_longer(cols = contains("hrs"), 
+               names_to = "Time",
+               values_to = "Expression") %>%
+  ggplot(aes(x = Time, y = Expression, group = group)) + 
+  geom_line() +
+  geom_point() + 
+  labs(y = "relative expression")+ 
+  geom_hline(yintercept=0, linetype="dashed", color = "red") + 
+  ylim(-2,2) + 
+  theme(legend.position = "none",
+        axis.title.x = element_blank())
+tran_down <- tibble(
+  hrs15 = c(-1,-1), 
+  hrs30 = c(0,0.5), 
+  group = c("A", "B")
+) %>%
+  pivot_longer(cols = contains("hrs"), 
+               names_to = "Time",
+               values_to = "Expression") %>%
+  ggplot(aes(x = Time, y = Expression, group = group)) + 
+  geom_line() +
+  geom_point() + 
+  labs(y = "relative expression")+ 
+  geom_hline(yintercept=0, linetype="dashed", color = "red") + 
+  ylim(-2,2) + 
+  theme(legend.position = "none",
+        axis.title.x = element_blank())
+late_up <- tibble(
+  hrs15 = c(0), 
+  hrs30 = c(1), 
+  group = c("A")
+) %>%
+  pivot_longer(cols = contains("hrs"), 
+               names_to = "Time",
+               values_to = "Expression") %>%
+  ggplot(aes(x = Time, y = Expression, group = group)) + 
+  geom_line() +
+  geom_point() + 
+  labs(y = "relative expression")+ 
+  geom_hline(yintercept=0, linetype="dashed", color = "red") + 
+  ylim(-2,2) + 
+  theme(legend.position = "none",
+        axis.title.x = element_blank())
+late_down <- tibble(
+  hrs15 = c(0), 
+  hrs30 = c(-1), 
+  group = c("A")
+) %>%
+  pivot_longer(cols = contains("hrs"), 
+               names_to = "Time",
+               values_to = "Expression") %>%
+  ggplot(aes(x = Time, y = Expression, group = group)) + 
+  geom_line() +
+  geom_point() + 
+  labs(y = "relative expression")+ 
+  geom_hline(yintercept=0, linetype="dashed", color = "red") + 
+  ylim(-2,2) + 
+  theme(legend.position = "none",
+        axis.title.x = element_blank())
+# pdf(file = "/Users/wenjunliu/RNA_seq_autophagicflux/Figure/draft/3(a).pdf", 
+#     height = 5.5)
+plot_grid(early_down, tran_down, late_down, early_up,tran_up, late_up,
+          labels = c("Consistent_down", "Early_down","Late_down","Consistent_up", "Early_up", "Late_up"),
+          nrow = 2,
+          vjust = c(1,1,1,0.5,0.5),
+          scale = c(0.9,0.9, 0.9, 0.9, 0.9,0.9),
+          label_size = 11, 
+          greedy = TRUE)
+# dev.off()
+```
+
+
+```{r deGenes_hekAZD}
+deGenes_hekAZD <- topTables_hekAZD[c("AZD15vsContr","AZD30vsContr")] %>%
+  lapply(dplyr::filter, gene_id %in% hekAZD_DE, FDR < 0.05) %>%
+  lapply(mutate, Direction = case_when(logFC > 0 ~ "up", logFC < 0 ~ "down")) %>%
+  lapply(mutate, dir_coef = paste(coef, Direction, sep = "_")) %>%
+  bind_rows() %>%
+  split(f = .$dir_coef) %>%
+  lapply(extract2, "gene_name")
+```
+
+```{r overlapGroups}
+# Function for withdrawing overlap
+overlapGroups <- function (fromListInput, sort = TRUE) {
+  fromList2 <- function (input) {
+    elements <- unique(unlist(input))
+    data <- unlist(lapply(input, function(x) {
+      x <- as.vector(match(elements, x))
+    }))
+    data[is.na(data)] <- as.integer(0)
+    data[data != 0] <- as.integer(1)
+    data <- data.frame(matrix(data, ncol = length(input), byrow = F))
+    data <- data[which(rowSums(data) != 0), ]
+    names(data) <- names(input)
+    row.names(data) <- elements
+    return(data)
+  }
+  fromListOutput <- fromList2(fromListInput)
+  listInputunique <- unique(fromListOutput)
+  grouplist <- list()
+  for (i in 1:nrow(listInputunique)) {
+    currentRow <- listInputunique[i,]
+    myelements <- which(apply(fromListOutput,1,function(x) all(x == currentRow))) %>%
+      names()
+    attr(myelements, "degree") <- currentRow %>% sum(na.rm = TRUE)
+    Name <- colnames(listInputunique)[currentRow == 1]
+    attrName <- sapply(str_split(Name, "_"), "[", 1) %>% unique()
+    if(sum(str_detect(attrName,"15vsContr")) == 1){
+      temp <- str_subset(Name,"15vsContr") %>%
+        str_split_fixed(pattern = "_", 2) %>%
+        .[1,2]
+    } else{
+      temp <- c("x")
+    }
+    if(sum(str_detect(attrName,"30vsContr")) == 1){
+      temp2 <- str_subset(Name,"30vsContr") %>%
+        str_split_fixed(pattern = "_", 2) %>%
+        .[1,2]
+      temp <- c(temp, temp2)
+    } else{
+      temp <- c(temp,"x")
+    }
+    attr(myelements, "Group") <- paste(temp, collapse = "_")
+    
+    grouplist[[paste(colnames(listInputunique)[currentRow == 1], collapse = ":")]] <- myelements
+  }
+  if (sort) {
+    grouplist <- grouplist[order(sapply(grouplist, function(x) length(x)), decreasing = TRUE)]
+  }
+  return(grouplist)
+}
+```
+
+```{r Genegroup_hekAZD}
+Genegroup_hekAZD <- list()
+OG_hekAZD <- overlapGroups(deGenes_hekAZD)
+Genegroup_hekAZD[["Trans_up"]] <- Filter(function(x) attr(x, "Group") %in% c("up_down", "up_x"), OG_hekAZD) %>%
+  unname() %>%
+  unlist() 
+Genegroup_hekAZD[["Trans_down"]] <- Filter(function(x) attr(x, "Group") %in% c("down_up", "down_x"), OG_hekAZD) %>%
+  unname() %>%
+  unlist() 
+Genegroup_hekAZD[["Early_up"]] <- Filter(function(x) attr(x, "Group") %in% c("up_up"), OG_hekAZD) %>%
+  unname() %>%
+  unlist() 
+Genegroup_hekAZD[["Early_down"]] <- Filter(function(x) attr(x, "Group") %in% c("down_down"), OG_hekAZD) %>%
+  unname() %>%
+  unlist() 
+Genegroup_hekAZD[["Late_down"]] <- Filter(function(x) attr(x, "Group") %in% c("x_down"), OG_hekAZD) %>%
+  unname() %>%
+  unlist() 
+Genegroup_hekAZD[["Late_up"]] <- Filter(function(x) attr(x, "Group") %in% c("x_up"), OG_hekAZD) %>%
+  unname() %>%
+  unlist()
+Genegroup_hekAZD %>% 
+  vapply(length, integer(1)) %>% 
+  pander()
+# sapply(names(Genegroup_hekAZD), function(x){
+#   Genegroup_hekAZD[[x]] %>%
+#     as.data.frame() %>%
+#     set_colnames("gene_name") %>%
+#     mutate(Coeff = x)
+# }, simplify = FALSE) %>%
+#   bind_rows() %>%
+#   write_csv(
+#     path = here::here("output/DEinGroups/Genegroup_hekAZD.csv")
+#   )
+```
+
+```{r hekAZD_bp, fig.width=8, fig.height=6, fig.cap="*Boxplots of logCPM of genes split into each of the 6 groups for AZD8055 treated hek samples.*"}
+hekAZD_bp <- sapply(names(Genegroup_hekAZD), function(x){
+  topTables_hekAZD$AZD1vsContr %>%
+    dplyr::filter(gene_name %in% Genegroup_hekAZD[[x]]) %>%
+    dplyr::select(gene_id, gene_name) %>% 
+    cbind(cpm(hekAZD_dgeList, log = TRUE)[.$gene_id,]) %>%
+    dplyr::select(-c("gene_id", "gene_name")) %>% 
+    pivot_longer(cols = everything(),
+                 names_to = "sample", values_to = "logCPM") %>%
+    mutate(group = x) %>%
+    left_join(hekAZD_dgeList$samples[,c("sample", "timeGroups")]) %>%
+    dplyr::filter(timeGroups != "DMSO_30") %>%
+    ggplot(aes(timeGroups, logCPM)) +
+    geom_boxplot() + 
+    ggtitle(x)
+}, simplify = FALSE)
+plot_grid(plotlist = hekAZD_bp)
+```
+
+```{r hekAZD_bp2, fig.width=10, fig.height=5, fig.cap="*Boxplots of logCPM of 1 of the gene from each of the 6 groups for AZD8055 treated hek samples.*"}
+hekAZD_bp2 <-sapply(names(Genegroup_hekAZD), function(x){
+  topTables_hekAZD$AZD1vsContr %>%
+    dplyr::filter(gene_name %in% Genegroup_hekAZD[[x]][1:5]) %>%
+    dplyr::select(gene_id, gene_name) %>%
+    cbind(cpm(hekAZD_dgeList, log = TRUE)[.$gene_id,]) %>%
+    .[3,] %>%
+    mutate(group = x) %>%
+    pivot_longer(cols = any_of(colnames(hekAZD_dgeList)), 
+                 names_to = "sample", values_to = "logCPM") %>%
+    left_join(hekAZD_dgeList$samples[,c("sample", "timeGroups")]) %>%
+    dplyr::filter(timeGroups != "DMSO_30") %>%
+    ggplot(aes(timeGroups, logCPM)) +
+    geom_boxplot() +
+    ggtitle(x)
+}, simplify = FALSE)
+plot_grid(plotlist = hekAZD_bp2)
+```
+
+```{r deGenes_hekAZDcontr_upset, fig.height=3}
+deGenes_hekAZDdmso <- topTables_hekAZD[c("DMSO30vs0")] %>%
+  lapply(dplyr::filter, gene_id %in% hekAZD_DE, FDR < 0.05) %>%
+  lapply(mutate, Direction = case_when(logFC > 0 ~ "up", logFC < 0 ~ "down")) %>%
+  lapply(mutate, dir_coef = paste(coef, Direction, sep = "_")) %>%
+  bind_rows() %>%
+  split(f = .$dir_coef) %>%
+  lapply(extract2, "gene_name")
+deGenes_hekAZDdmso %>% 
+  fromList() %>%
+  upset()
+```
+
+```{r deGenes_hekAZDcontr}
+sapply(names(deGenes_hekAZDdmso ), function(x){
+  Genegroup_hekAZD %>%
+    lapply(intersect, deGenes_hekAZDdmso [[x]]) %>%
+    vapply(length, integer(1))
+}, simplify = FALSE)
+```
+
+### EBSS
+```{r d_hek_EBSS}
+hek_dgeList$samples$timeGroups <- relevel(hek_dgeList$samples$timeGroups, ref = "DMEM_0")
+d_hek_EBSS <- model.matrix(~ timeGroups, data = hek_dgeList$samples %>%
+                              dplyr::filter(TREAT %in% c("DMEM", "EBSS")) %>%
+                              droplevels())
+d_hek_EBSS <- d_hek_EBSS %>%
+  set_colnames(c("Intercept","DMEM30","EBSS1", "EBSS15", "EBSS30"))
+hek_EBSS <- grepl(paste(dplyr::filter(hek_metadata, TREAT %in% c("EBSS", "DMEM"))$sample, collapse="|"),hek_dgeList$samples$sample)
+hekEBSS_dgeList <- hek_dgeList[,hek_EBSS]
+hekEBSS_dgeList %<>% estimateDisp(design = d_hek_EBSS)
+```
+
+```{r dmVisualisation1, fig.height=3, fig.width=6, fig.cap = "*Visualisation of the pairwise design matrix for EBSS8055 treatment*"}
+pheatmap(d_hek_EBSS,
+         cluster_cols = FALSE, 
+         cluster_rows = FALSE,
+         legend = FALSE)
+```
+
+```{r MakeContrast_EBSS}
+contrast_EBSS <- makeContrasts(EBSS1vsContr = EBSS1,
+                               EBSS15vsContr = EBSS15,
+                               EBSS30vsContr = EBSS30,
+                               DMEM30vs0 = DMEM30,
+                               levels = d_hek_EBSS)
+```
+
+```{r topTables_hekEBSS}
+fit_hekEBSS <- glmQLFit(hekEBSS_dgeList)
+topTables_hekEBSS  <- colnames(contrast_EBSS) %>%
+  sapply(function(x){
+    glmTreat(fit_hekEBSS, contrast = contrast_EBSS[,x]) %>%
+      topTags(n = Inf) %>%
+      .[["table"]] %>%
+      as_tibble() %>%
+      arrange(PValue) %>%
+      dplyr::select(
+         gene_id, gene_name, logFC, logCPM, PValue, FDR, everything()) %>%
+      mutate(
+        coef = x,
+        bonfP = p.adjust(PValue, "bonf"),
+        DE = case_when(
+          bonfP < alpha ~ TRUE,
+          FDR < alpha & abs(logFC) > minLfc ~ TRUE
+        ),
+        DE = ifelse(is.na(DE), FALSE, DE)
+        )
+  }, simplify = FALSE)
+topTables_hekEBSS %>%
+  lapply(dplyr::filter, DE) %>% 
+  vapply(nrow, integer(1)) %>%
+  pander()
+# write_rds(topTables_hekEBSS,
+#           path = here::here("output/newTop/topTables_hekEBSS.rds"),
+#           compress = "gz")
+```
+
+```{r deGenes_hekEBSS}
+hekEBSS_DE <- topTables_hekEBSS[c("EBSS1vsContr","EBSS15vsContr","EBSS30vsContr")] %>%
+  lapply(dplyr::filter, DE) %>%
+  bind_rows() %>%
+  extract2("gene_id")
+deGenes_hekEBSS <- topTables_hekEBSS[c("EBSS15vsContr","EBSS30vsContr")] %>%
+  lapply(dplyr::filter, gene_id %in% hekEBSS_DE, FDR < 0.05) %>%
+  lapply(mutate, Direction = case_when(logFC > 0 ~ "up", logFC < 0 ~ "down")) %>%
+  lapply(mutate, dir_coef = paste(coef, Direction, sep = "_")) %>%
+  bind_rows() %>%
+  split(f = .$dir_coef) %>%
+  lapply(extract2, "gene_name")
+```
+
+```{r Genegroup_hekEBSS}
+Genegroup_hekEBSS <- list()
+OG_hekEBSS <- overlapGroups(deGenes_hekEBSS)
+Genegroup_hekEBSS[["Trans_up"]] <- Filter(function(x) attr(x, "Group") %in% c("up_down", "up_x"), OG_hekEBSS) %>%
+  unname() %>%
+  unlist() 
+Genegroup_hekEBSS[["Trans_down"]] <- Filter(function(x) attr(x, "Group") %in% c("down_up", "down_x"), OG_hekEBSS) %>%
+  unname() %>%
+  unlist() 
+Genegroup_hekEBSS[["Early_up"]] <- Filter(function(x) attr(x, "Group") %in% c("up_up"), OG_hekEBSS) %>%
+  unname() %>%
+  unlist() 
+Genegroup_hekEBSS[["Early_down"]] <- Filter(function(x) attr(x, "Group") %in% c("down_down"), OG_hekEBSS) %>%
+  unname() %>%
+  unlist() 
+Genegroup_hekEBSS[["Late_down"]] <- Filter(function(x) attr(x, "Group") %in% c("x_down"), OG_hekEBSS) %>%
+  unname() %>%
+  unlist() 
+Genegroup_hekEBSS[["Late_up"]] <- Filter(function(x) attr(x, "Group") %in% c("x_up"), OG_hekEBSS) %>%
+  unname() %>%
+  unlist()
+Genegroup_hekEBSS %>% 
+  vapply(length, integer(1)) %>% 
+  pander()
+```
+
+```{r deGenes_hekEBSScontr}
+deGenes_hekEBSSdmem <- topTables_hekEBSS[c("DMEM30vs0")] %>%
+  lapply(dplyr::filter, gene_id %in% hekEBSS_DE, FDR < 0.05) %>%
+  lapply(mutate, Direction = case_when(logFC > 0 ~ "up", logFC < 0 ~ "down")) %>%
+  lapply(mutate, dir_coef = paste(coef, Direction, sep = "_")) %>%
+  bind_rows() %>%
+  split(f = .$dir_coef) %>%
+  lapply(extract2, "gene_name")
+sapply(names(deGenes_hekEBSSdmem ), function(x){
+  Genegroup_hekEBSS %>%
+    lapply(intersect, deGenes_hekEBSSdmem [[x]]) %>%
+    vapply(length, integer(1))
+}, simplify = FALSE)
+```
+
+## Abondoned genes
+```{r}
+thrownGenes <- list(
+  SH = SH_thrownGene,
+  Hela = hela_thrownGene, 
+  Hek = hek_thrownGene
+)
+thrownGenes %>% 
+  lapply(length) %>%
+  Reduce(ave,.) 
+thrownGenes %>%
+  Reduce(ave,.) %>%
+  length()
+thrownGenes %>% 
+  lapply(intersect, deGenes_SHEBSS %>%
+  unlist() %>%
+    unname() %>%
+    unique() ) %>%
+  lapply(length)
+thrownGenes %>% 
+    lapply(intersect, deGenes_helaEBSS%>%
+  unlist() %>%
+    unname() %>%
+    unique() ) %>%
+  lapply(length)
+```
+
+```{r}
+SH_thrownGene <- setdiff(dgeList$genes$gene_id, SH_dgeList$genes$gene_id)
+SH_thrownDGE <- dgeList[SH_thrownGene,]
+treatSample_SH <- SH_thrownDGE$samples %>%
+  dplyr::filter(TREAT %in% c("AZD8055", "EBSS"), CELL == "SH-SY5Y.tfLC3") %>%
+  extract2("sample")
+treatSample_SH <- grepl(paste(treatSample_SH, collapse="|"),SH_thrownDGE$samples$sample)  
+table(treatSample_SH)
+sh_HS <- SH_thrownDGE[,treatSample_SH] %>% 
+  cpm() %>%
+  hist(main = "SH-SY5Y")
+Hela_thrownGene <- setdiff(dgeList$genes$gene_id, hela_dgeList$genes$gene_id)
+Hela_thrownDGE <- dgeList[Hela_thrownGene,]
+treatSample_Hela <- Hela_thrownDGE$samples %>%
+  dplyr::filter(TREAT %in% c("AZD8055", "EBSS"), CELL == "HeLa.tfLC3") %>%
+  extract2("sample")
+treatSample_Hela <- grepl(paste(treatSample_Hela, collapse="|"),Hela_thrownDGE$samples$sample)  
+table(treatSample_Hela)
+hela_HS <- Hela_thrownDGE[,treatSample_Hela] %>% 
+  cpm() %>%
+  hist(main = "HeLa")
+  # .[rowSums(cpm(.) >= minCPM) >= minSamples,] %>%
+  # length()
+Hek_thrownGene <- setdiff(dgeList$genes$gene_id, hek_dgeList$genes$gene_id)
+Hek_thrownDGE <- dgeList[Hek_thrownGene,]
+treatSample_Hek <- Hek_thrownDGE$samples %>%
+  dplyr::filter(TREAT %in% c("AZD8055", "EBSS"), CELL == "HEK293.tfLC3") %>%
+  extract2("sample")
+treatSample_Hek <- grepl(paste(treatSample_Hek, collapse="|"),Hek_thrownDGE$samples$sample)  
+table(treatSample_Hek)
+hek_HS <- Hek_thrownDGE[,treatSample_Hek] %>% 
+  cpm() %>%
+  hist(main = "HEK293")
+SH_dgeList %>% 
+  cpm() %>%
+  hist(main = "SH-SY5Y")
+```
+```{r}
+cpm(dgeList, log = TRUE) %>%
+  as.data.frame() %>%
+  pivot_longer(
+    cols = everything(),
+    names_to = "sample",
+    values_to = "logCPM"
+  ) %>%
+  split(f = .$sample) %>%
+  lapply(function(x){
+    d <- density(x$logCPM)
+    tibble(
+      sample = unique(x$sample),
+      x = d$x,
+      y = d$y
+    )
+  }) %>%
+  bind_rows() %>%
+  left_join(metadata) %>%
+  ggplot(aes(x, y)) +
+  geom_line() +
+  xlim(-10, 20) +
+  facet_wrap(~CELL) +
+  labs(
+    x = "logCPM",
+    y = "Density",
+    colour = "TREAT"
+  )
+```
+
+```{r}
+cpm(dgeList, log = TRUE) %>%
+  as.data.frame() %>%
+  pivot_longer(
+    cols = everything(),
+    names_to = "sample",
+    values_to = "logCPM"
+  ) %>%
+  split(f = .$sample) %>%
+  lapply(function(x){
+    d <- density(x$logCPM)
+    tibble(
+      sample = unique(x$sample),
+      x = d$x,
+      y = d$y
+    )
+  }) %>%
+  bind_rows() %>%
+  left_join(metadata) %>%
+  dplyr::filter(TREAT %in% c("DMSO", "DMEM")) %>%
+  ggplot(aes(x, y)) +
+  geom_line() +
+  xlim(-10, 20) +
+  facet_wrap(~CELL) +
+  labs(
+    x = "logCPM",
+    y = "Density",
+    colour = "TREAT"
+  )
+```
+
+```{r}
+p_SH <- cpm(SH_dgeList, log = TRUE) %>%
+  as.data.frame() %>%
+  pivot_longer(
+    cols = everything(),
+    names_to = "sample",
+    values_to = "logCPM"
+  ) %>%
+  ggplot(aes(x = logCPM)) +
+  geom_histogram() +
+  labs(
+    x = "logCPM",
+    y = "Counts",
+    colour = "TREAT"
+  )
+p_hek <- cpm(hek_dgeList, log = TRUE) %>%
+  as.data.frame() %>%
+  pivot_longer(
+    cols = everything(),
+    names_to = "sample",
+    values_to = "logCPM"
+  ) %>%
+  ggplot(aes(x = logCPM)) +
+  geom_histogram() +
+  labs(
+    x = "logCPM",
+    y = "Counts",
+    colour = "TREAT"
+  )
+p_hela <- cpm(hela_dgeList, log = TRUE) %>%
+  as.data.frame() %>%
+  pivot_longer(
+    cols = everything(),
+    names_to = "sample",
+    values_to = "logCPM"
+  ) %>%
+  ggplot(aes(x = logCPM)) +
+  geom_histogram() +
+  labs(
+    x = "logCPM",
+    y = "Counts",
+    colour = "TREAT"
+  )
+plot_grid(p_SH, p_hek, p_hela, 
+          nrow = 1)
+```
+
+```{r}
+p_SH <- cpm(dgeList, log = TRUE) %>%
+  as.data.frame() %>%
+  .[thrownGenes$SH,] %>%
+  pivot_longer(
+    cols = everything(),
+    names_to = "sample",
+    values_to = "logCPM"
+  ) %>%
+  left_join(metadata) %>%
+  dplyr::filter(CELL == "SH-SY5Y.tfLC3") %>%
+  ggplot(aes(x = logCPM)) +
+  geom_histogram() +
+  labs(
+    x = "logCPM",
+    y = "Counts",
+    colour = "TREAT"
+  )
+p_hek <- cpm(dgeList, log = TRUE) %>%
+  as.data.frame() %>%
+  .[thrownGenes$Hek,] %>%
+  pivot_longer(
+    cols = everything(),
+    names_to = "sample",
+    values_to = "logCPM"
+  ) %>%
+  left_join(metadata) %>%
+  dplyr::filter(CELL == "HEK293.tfLC3") %>%
+  ggplot(aes(x = logCPM)) +
+  geom_histogram() +
+  labs(
+    x = "logCPM",
+    y = "Counts",
+    colour = "TREAT"
+  )
+p_hela <- cpm(dgeList, log = TRUE) %>%
+  as.data.frame() %>%
+  .[thrownGenes$Hela,] %>%
+  pivot_longer(
+    cols = everything(),
+    names_to = "sample",
+    values_to = "logCPM"
+  ) %>%
+  left_join(metadata) %>%
+  dplyr::filter(CELL == "HeLa.tfLC3") %>%
+  ggplot(aes(x = logCPM)) +
+  geom_histogram() +
+  labs(
+    x = "logCPM",
+    y = "Counts",
+    colour = "TREAT"
+  )
+plot_grid(p_SH, p_hek, p_hela, 
+          nrow = 1)
+```
+
+```{r}
+Sample_SH <- dgeList$samples %>%
+  dplyr::filter(CELL == "SH-SY5Y.tfLC3") %>%
+  extract2("sample")
+Sample_Hela <- dgeList$samples %>%
+  dplyr::filter(CELL == "HeLa.tfLC3") %>%
+  extract2("sample")
+Sample_Hek <- dgeList$samples %>%
+  dplyr::filter(CELL == "HEK293.tfLC3") %>%
+  extract2("sample")
+p_SH <- cpm(dgeList, log = TRUE) %>%
+  as.data.frame() %>%
+  .[thrownGenes$SH, Sample_SH] %>%
+  mutate(avePerGene = rowMeans(.)) %>%
+  ggplot(aes(x = avePerGene)) +
+  geom_histogram() +
+  labs(
+    x = "average logCPM",
+    y = "Number of genes",
+    colour = "TREAT"
+  )
+p_SH <- cpm(dgeList, log = TRUE) %>%
+  as.data.frame() %>%
+  .[thrownGenes$SH, Sample_SH] %>%
+  mutate(avePerGene = rowMeans(.)) %>%
+  ggplot(aes(x = avePerGene)) +
+  geom_histogram() +
+  labs(
+    x = "average logCPM",
+    y = "Number of genes",
+    colour = "TREAT"
+  )
+p_hela <- cpm(dgeList, log = TRUE) %>%
+  as.data.frame() %>%
+  .[thrownGenes$Hela, Sample_Hela] %>%
+  mutate(avePerGene = rowMeans(.)) %>%
+  ggplot(aes(x = avePerGene)) +
+  geom_histogram() +
+  labs(
+    x = "average logCPM",
+    y = "Number of genes",
+    colour = "TREAT"
+  )
+p_hek <- cpm(dgeList, log = TRUE) %>%
+  as.data.frame() %>%
+  .[thrownGenes$Hek, Sample_Hek] %>%
+  mutate(avePerGene = rowMeans(.)) %>%
+  ggplot(aes(x = avePerGene)) +
+  geom_histogram() +
+  labs(
+    x = "average logCPM",
+    y = "Number of genes",
+    colour = "TREAT"
+  )
+plot_grid(p_SH, p_hek, p_hela, 
+          nrow = 1)
+```
+
+```{r}
+p_SH <- cpm(SH_dgeList, log = TRUE) %>%
+  as.data.frame() %>%
+  mutate(avePerGene = rowMeans(.)) %>%
+  ggplot(aes(x = avePerGene)) +
+  geom_histogram() +
+  labs(
+    x = "average logCPM",
+    y = "Number of genes",
+    colour = "TREAT"
+  )
+p_hek <- cpm(hek_dgeList, log = TRUE) %>%
+  as.data.frame() %>%
+  mutate(avePerGene = rowMeans(.)) %>%
+  ggplot(aes(x = avePerGene)) +
+  geom_histogram() +
+  labs(
+    x = "average logCPM",
+    y = "Number of genes",
+    colour = "TREAT"
+  )
+p_hela <- cpm(hela_dgeList, log = TRUE) %>%
+  as.data.frame() %>%
+  mutate(avePerGene = rowMeans(.)) %>%
+  ggplot(aes(x = avePerGene)) +
+  geom_histogram() +
+  labs(
+    x = "average logCPM",
+    y = "Number of genes",
+    colour = "TREAT"
+  )
+plot_grid(p_SH, p_hek, p_hela, 
+          nrow = 1)
+```
+## Clustering
+Infinity occurred becuase of the extremely small FDR. Maybe add 2.22507385850720E-308? 
+
+```{r zscore}
+# helaAZD_zscore <- topTables_helaAZD[c("AZD1vsContr","AZD30vsContr", "AZD15vsContr") ]%>%
+#   lapply(mutate, 
+#          coef = paste(coef, "Hela", sep = "_"),
+#          FDR = FDR,
+#          Zscore = -sign(logFC) * qnorm(FDR/2)) %>%
+#   lapply(dplyr::select, gene_name,  coef, Zscore) %>%
+#   lapply(function(x) x[!duplicated(x$gene_name),]) %>%
+#   bind_rows()  %>%
+#   pivot_wider(names_from = coef, 
+#               values_from = Zscore) 
+# helaEBSS_zscore <- topTables_helaEBSS[c("EBSS1vsContr","EBSS30vsContr", "EBSS15vsContr") ]%>%
+#   lapply(mutate, 
+#          coef = paste(coef, "Hela", sep = "_"),
+#          FDR = FDR,
+#          Zscore = -sign(logFC) * qnorm(FDR/2)) %>%
+#   lapply(dplyr::select, gene_name,  coef, Zscore) %>%
+#   lapply(function(x) x[!duplicated(x$gene_name),]) %>%
+#   bind_rows()  %>%
+#   pivot_wider(names_from = coef, 
+#               values_from = Zscore) 
+# hela_zscore <- helaEBSS_zscore %>%
+#   left_join(helaAZD_zscore)
+# SHAZD_zscore <- topTables_SHAZD[c("AZD1vsContr","AZD30vsContr", "AZD15vsContr") ]%>%
+#   lapply(mutate, 
+#          coef = paste(coef, "SH", sep = "_"),
+#          FDR = FDR,
+#          Zscore = -sign(logFC) * qnorm(FDR/2)) %>%
+#   lapply(dplyr::select, gene_name,  coef, Zscore) %>%
+#   lapply(function(x) x[!duplicated(x$gene_name),]) %>%
+#   bind_rows()  %>%
+#   pivot_wider(names_from = coef, 
+#               values_from = Zscore) 
+# SHEBSS_zscore <- topTables_SHEBSS[c("EBSS1vsContr","EBSS30vsContr", "EBSS15vsContr") ]%>%
+#   lapply(mutate, 
+#          coef = paste(coef, "SH", sep = "_"),
+#          FDR = FDR,
+#          Zscore = -sign(logFC) * qnorm(FDR/2)) %>%
+#   lapply(dplyr::select, gene_name,  coef, Zscore) %>%
+#   lapply(function(x) x[!duplicated(x$gene_name),]) %>%
+#   bind_rows()  %>%
+#   pivot_wider(names_from = coef, 
+#               values_from = Zscore) 
+# SH_zscore <- SHEBSS_zscore %>%
+#   left_join(SHAZD_zscore)
+# hekAZD_zscore <- topTables_hekAZD[c("AZD1vsContr","AZD30vsContr", "AZD15vsContr") ]%>%
+#   lapply(mutate, 
+#          coef = paste(coef, "hek", sep = "_"),
+#          FDR = FDR,
+#          Zscore = -sign(logFC) * qnorm(FDR/2)) %>%
+#   lapply(dplyr::select, gene_name,  coef, Zscore) %>%
+#   lapply(function(x) x[!duplicated(x$gene_name),]) %>%
+#   bind_rows()  %>%
+#   pivot_wider(names_from = coef, 
+#               values_from = Zscore) 
+# hekEBSS_zscore <- topTables_hekEBSS[c("EBSS1vsContr","EBSS30vsContr", "EBSS15vsContr") ]%>%
+#   lapply(mutate, 
+#          coef = paste(coef, "hek", sep = "_"),
+#          FDR = FDR,
+#          Zscore = -sign(logFC) * qnorm(FDR/2)) %>%
+#   lapply(dplyr::select, gene_name,  coef, Zscore) %>%
+#   lapply(function(x) x[!duplicated(x$gene_name),]) %>%
+#   bind_rows()  %>%
+#   pivot_wider(names_from = coef, 
+#               values_from = Zscore) 
+# hek_zscore <- hekEBSS_zscore %>%
+#   left_join(hekAZD_zscore)
+# meta_zscore <- hela_zscore %>%
+#   left_join(SH_zscore) %>%
+#   left_join(hek_zscore)
+```
+
+
+
+```{r merged_p}
+helaAZD_PValue <- topTables_helaAZD[c("AZD1vsContr","AZD30vsContr", "AZD15vsContr") ]%>%
+  lapply(mutate, 
+         coef = paste(coef, "Hela", sep = "_")) %>%
+  lapply(dplyr::select, gene_name,  coef, PValue) %>%
+  lapply(function(x) x[!duplicated(x$gene_name),]) %>%
+  bind_rows()  %>%
+  pivot_wider(names_from = coef, 
+              values_from = PValue) 
+helaEBSS_PValue <- topTables_helaEBSS[c("EBSS1vsContr","EBSS30vsContr", "EBSS15vsContr") ]%>%
+  lapply(mutate, 
+         coef = paste(coef, "Hela", sep = "_")) %>%
+  lapply(dplyr::select, gene_name,  coef, PValue) %>%
+  lapply(function(x) x[!duplicated(x$gene_name),]) %>%
+  bind_rows()  %>%
+  pivot_wider(names_from = coef, 
+              values_from = PValue) 
+hela_PValue <- helaEBSS_PValue %>%
+  left_join(helaAZD_PValue)
+SHAZD_PValue <- topTables_SHAZD[c("AZD1vsContr","AZD30vsContr", "AZD15vsContr") ]%>%
+  lapply(mutate, 
+         coef = paste(coef, "SH", sep = "_")) %>%
+  lapply(dplyr::select, gene_name,  coef, PValue) %>%
+  lapply(function(x) x[!duplicated(x$gene_name),]) %>%
+  bind_rows()  %>%
+  pivot_wider(names_from = coef, 
+              values_from = PValue) 
+SHEBSS_PValue <- topTables_SHEBSS[c("EBSS1vsContr","EBSS30vsContr", "EBSS15vsContr") ]%>%
+  lapply(mutate, 
+         coef = paste(coef, "SH", sep = "_")) %>%
+  lapply(dplyr::select, gene_name,  coef, PValue) %>%
+  lapply(function(x) x[!duplicated(x$gene_name),]) %>%
+  bind_rows()  %>%
+  pivot_wider(names_from = coef, 
+              values_from = PValue) 
+SH_PValue <- SHEBSS_PValue %>%
+  left_join(SHAZD_PValue)
+hekAZD_PValue <- topTables_hekAZD[c("AZD1vsContr","AZD30vsContr", "AZD15vsContr") ]%>%
+  lapply(mutate, 
+         coef = paste(coef, "hek", sep = "_")) %>%
+  lapply(dplyr::select, gene_name,  coef, PValue) %>%
+  lapply(function(x) x[!duplicated(x$gene_name),]) %>%
+  bind_rows()  %>%
+  pivot_wider(names_from = coef, 
+              values_from = PValue) 
+hekEBSS_PValue <- topTables_hekEBSS[c("EBSS1vsContr","EBSS30vsContr", "EBSS15vsContr") ]%>%
+  lapply(mutate, 
+         coef = paste(coef, "hek", sep = "_")) %>%
+  lapply(dplyr::select, gene_name,  coef, PValue) %>%
+  lapply(function(x) x[!duplicated(x$gene_name),]) %>%
+  bind_rows()  %>%
+  pivot_wider(names_from = coef, 
+              values_from = PValue) 
+hek_PValue <- hekEBSS_PValue %>%
+  left_join(hekAZD_PValue)
+meta_PValue <- hela_PValue %>%
+  left_join(SH_PValue) %>%
+  left_join(hek_PValue)
+meta_PValue %>%
+  write_csv(file = here::here("output/DEoutput/meta/merged_p.csv"))
+``` 
+
+```{r numeroMap, fig.height=7}
+meta_zscore <- meta_zscore %>%
+  column_to_rownames("gene_name") 
+meta_zscore[meta_zscore > 20] <- 20
+meta_zscore[meta_zscore < -20] <- -20
+numeroCreate <- numero.create(meta_zscore)
+numero_QC <- numero.quality(numeroCreate)
+numero.plot(numero_QC)
+numero_Eva <- numero.evaluate(numero_QC, 
+                meta_zscore)
+numero.plot(numero_Eva, folder = "/Users/wenjunliu/RNA_seq_autophagicflux/output/")
+numeroCreate$map$layout
+numeroCreate$map$topology
+subgroup <- read_delim(file = here::here("regions_ABD.txt"), 
+                     col_names = TRUE, 
+                     delim = "\t" ) %>%
+  set_rownames(seq_len(nrow(.)))
+```
+
+```{r SubgroupA_hela, fig.height=3, fig.width=12, fig.cap="*Boxplots of logCPM of genes in subgroup A in HeLa cell line.*"}
+dgeList$samples$timeGroups <- paste(dgeList$samples$TREAT, dgeList$samples$TIME, sep = "_") %>%
+  as.factor()
+SubgroupA <- numeroCreate$map$layout %>%
+  dplyr::filter(BMC %in% which(subgroup$REGION.label == "A")) %>%
+  rownames()
+subA_bp <- topTables_helaAZD$AZD1vsContr %>%
+    dplyr::filter(gene_name %in% SubgroupA) %>%
+    dplyr::select(gene_id, gene_name) %>% 
+    cbind(cpm(hela_dgeList, log = TRUE)[.$gene_id,]) %>%
+    dplyr::select(-c("gene_id", "gene_name")) %>% 
+    pivot_longer(cols = everything(),
+                 names_to = "sample", values_to = "logCPM") %>%
+    left_join(hela_dgeList$samples[,c("sample", "timeGroups", "TREAT")]) 
+subA_bp1 <- subA_bp %>%
+  dplyr::filter(TREAT %in% c("DMSO", "AZD8055")) %>%
+    ggplot(aes(timeGroups, logCPM)) +
+    geom_boxplot() 
+subA_bp2 <- subA_bp %>%
+  dplyr::filter(TREAT %in% c("DMEM", "EBSS")) %>%
+    ggplot(aes(timeGroups, logCPM)) +
+    geom_boxplot()
+plot_grid(subA_bp1, subA_bp2)
+```
+
+
+
+
