@@ -1,0 +1,544 @@
+---
+title: "TFT_enrichment"
+output: html_document
+date: '2022-03-20'
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+    autodep = TRUE,
+	echo = TRUE,
+	warning = FALSE,
+	message = FALSE
+)
+```
+
+#Set libaries
+```{r loadPackages}
+library(ngsReports)
+library(tidyverse)
+library(magrittr)
+library(edgeR)
+library(AnnotationHub)
+library(ensembldb)
+library(scales)
+library(pander)
+library(cqn)
+library(ggrepel)
+library(pheatmap)
+library(RColorBrewer)
+library(corrplot)
+library(UpSetR)
+library(cowplot)
+library(msigdbr)
+library(GO.db)
+library(goseq)
+library(kableExtra)
+library(plotly)
+library(reshape2)
+library(DT)
+library(ComplexHeatmap)
+library(viridis)
+library(igraph)
+library(ggraph)
+```
+
+```{r setOpts}
+theme_set(theme_bw())
+panderOptions("table.split.table", Inf)
+panderOptions("table.style", "rmarkdown")
+panderOptions("big.mark", ",")
+```
+
+```{r annotationSetup}
+ah <- AnnotationHub() %>%
+	subset(species == "Homo sapiens") %>%
+	subset(rdataclass == "EnsDb")
+ensDB <- ah[["AH75011"]]
+grTrans <- transcripts(ensDB)
+trLengths <- exonsBy(ensDB, "tx") %>%
+	width() %>%
+	vapply(sum, integer(1))
+mcols(grTrans)$length <- trLengths[names(grTrans)]
+gcGene <- grTrans %>%
+  mcols() %>%
+  as.data.frame() %>%
+  dplyr::select(gene_id, tx_id, gc_content, length) %>%
+  as_tibble() %>%
+  group_by(gene_id) %>%
+  summarise(
+    gc_content = sum(gc_content*length) / sum(length),
+    length = ceiling(median(length))
+  )
+grGenes <- genes(ensDB)
+mcols(grGenes) %<>%
+  as.data.frame() %>%
+  left_join(gcGene) %>%
+  as.data.frame() %>%
+  DataFrame()
+```
+
+Raw read counts were read in and an overall `DGElist` object was created.
+
+```{r dgeList}
+filename <- here::here("data", "filename.txt") %>%
+  read.table(header = TRUE, sep = "\t",stringsAsFactors = FALSE) %>% 
+  as_tibble()%>%
+  mutate_at(vars(one_of(c("CELL", "TREAT","CONTR", "TIME"))), as.factor) %>%
+  mutate(TREATED = ifelse(CONTR == 0,1,0))
+dgeList <- here::here("data", "2_alignedData", "featureCounts", "genes.out") %>%
+  read_delim(delim = "\t") %>%
+  set_names(basename(names(.))) %>%
+  as.data.frame() %>%
+  column_to_rownames("Geneid") %>%
+  as.matrix() %>% 
+  set_colnames(str_remove(colnames(.), "Aligned.sortedByCoord.out.bam")) %>%
+  DGEList(
+    samples = tibble(sample = colnames(.)) %>%
+      left_join(dplyr::filter(filename, read == "R1")),
+    genes = grGenes[rownames(.)] %>%
+      as.data.frame() %>%
+      dplyr::select(
+        chromosome = seqnames, start, end, 
+        gene_id, gene_name, gene_biotype, description, 
+        entrezid, gc_content, length
+      )
+  ) %>%
+  .[!grepl("rRNA", .$genes$gene_biotype),] %>%
+  calcNormFactors()
+# here::here("data", "2_alignedData", "featureCounts", "genes.out") %>%
+#   read_delim(delim = "\t") %>%
+#   set_names(basename(names(.))) %>%
+#   as.data.frame() %>%
+#   column_to_rownames("Geneid") %>%
+#   as.matrix() %>% 
+#   set_colnames(str_remove(colnames(.), "Aligned.sortedByCoord.out.bam")) %>%
+#   write_rds(file = here::here("data/2_alignedData/featureCounts/rawCounts.rds"), compress = "gz")
+```
+
+# Retrieve TFT gene-sets
+
+
+```{r tf}
+entrezGenes <- dgeList$genes %>%
+  unnest(entrezid) %>%
+  dplyr::rename(entrez_gene = entrezid)
+# save(entrezGenes, file = here::here("output/Simplified/entrezGenes.Rda"))
+tf <- msigdbr("Homo sapiens", category = "C3") %>%
+  dplyr::filter(gs_subcat %in% c("TFT:GTRD", "TFT:TFT_Legacy")) %>%
+  dplyr::rename(gene_id = ensembl_gene) %>%
+  dplyr::filter(!is.na(gene_id)) %>%
+  distinct(gs_name, gene_id, .keep_all = TRUE)
+tfByGene <- tf  %>%
+  split(f = .$gene_id) %>%
+  lapply(extract2, "gs_name")
+tfByID <- tf  %>%
+  split(f = .$gs_name) %>%
+  lapply(extract2, "gene_symbol")
+```
+
+TFT gene-sets were retrieved from msigdbr. Mappings are required from gene to pathway, and Ensembl identifiers were used to map from gene to pathway, based on the mappings in the previously used annotations (Ensembl Release 98).
+
+A total of `r comma(length(tfByGene))` Ensembl IDs were mapped to pathways from the TFT gene sets. 
+
+```{r formatP}
+formatP <- function(p, m = 0.0001){
+out <- rep("", length(p))
+out[p < m] <- sprintf("%.2e", p[p<m])
+out[p >= m] <- sprintf("%.4f", p[p>=m])
+out <- as.numeric(out)
+out
+}
+```
+
+# TFT enrichment testing 
+
+```{r DE_genes}
+DE_genes <- readRDS(here::here("output/DE_genes.rds"))
+```
+
+Enrichment of Transcription factor target gene-sets (TFT) among DEGs defined under each condition was tested with `goseq`, using gene length as an offset. 
+```{r gcPwf_DE}
+# lenPwf_DE <- sapply(names(DE_genes), function(x){
+#   grTrans %>%
+#     as.data.frame() %>%
+#     distinct(gene_id, .keep_all = TRUE) %>%
+#     dplyr::select(gene_id, length) %>%
+#     mutate(Status = case_when(gene_id %in% DE_genes[[x]]$gene_id  ~ 1, !gene_id %in% DE_genes[[x]]$gene_id   ~ 0)) %>%
+#     with(
+#       nullp(
+#         DEgenes = structure(
+#           Status, names = gene_id
+#         ),
+#         genome = "GRCh38.p16",
+#         id = "ensGene",
+#         bias.data =length,
+#         plot.fit = FALSE
+#       )
+#     )
+# }, simplify = FALSE)
+# ```
+# 
+# ```{r goseqTF_DE}
+# goseqTF_DE <- sapply(names(DE_genes), function(x){
+#   goseq(lenPwf_DE[[x]],
+#         gene2cat = tfByGene) %>%
+#   as_tibble %>%
+#   dplyr::filter(numDEInCat > 0) %>%
+#   mutate(
+#     adjP = p.adjust(over_represented_pvalue, method = "bonf"),
+#     FDR = as.numeric(p.adjust(over_represented_pvalue, method = "fdr"))
+#   ) %>%
+#   dplyr::select(-contains("under")) %>%
+#   dplyr::rename(
+#     gs_name = category,
+#     PValue = over_represented_pvalue,
+#     nDE = numDEInCat,
+#     nExpressed = numInCat
+#   ) %>%
+#   left_join(tf) %>%
+#     dplyr::select(
+#     gs_name, nExpressed, nDE, gs_id,
+#     contains("P", ignore.case = FALSE),
+#     FDR,
+#     gene_name, gene_id
+#   ) %>%
+#   dplyr::filter(
+#     gene_id %in% DE_genes[[x]]$gene_id
+#   ) %>%
+#     chop(c("gene_name", "gene_id")) %>%
+#   mutate(
+#     gene_name = vapply(.$gene_name, function(x){
+#       paste(x,collapse = ";")
+#     }, character(1)),
+#     gene_id = vapply(.$gene_id, function(x){
+#       paste(x,collapse = ";")
+#     }, character(1))
+#   ) %>%
+#   dplyr::rename(DE = gene_name) %>%
+#   mutate_at(
+#     vars(one_of(c("PValue", "adjP", "FDR"))),
+#     formatP
+#   )
+# }, simplify = FALSE)
+
+# save(goseqTF_DE, file = here::here("output/goseqTF_DE.Rda"))
+load(here::here("output/goseqTF_DE.Rda"))
+names(goseqTF_DE) <- c("HEK293_AZD8055", "HEK293_Starvation", "SH-SY5Y_AZD8055", "SH-SY5Y_Starvation", "HeLa_AZD8055",
+                 "HeLa_Starvation")
+goseqTF_DE_sig <- goseqTF_DE %>%
+  lapply(dplyr::filter, FDR < 0.05) %>%
+  lapply(pull, gs_name)
+```
+
+### Summary
+
+```{r goseq_DEupset, fig.cap="*Overlap between TFT gene-sets enriched under each condition.From the plot, there are 9 gene-sets enriched under all condition (red), 22 that were unique to SY5Y cell line (blue), and 1 that was unique to starvation treatment (orange). *" }
+# pdf(file = "/Users/wenjunliu/RNA_seq_autophagicflux/Manuscript/Figure/newest/TFT_goseq_upset.pdf", onefile = FALSE, 
+#     height = 5, 
+#     width = 8)
+goseqTF_DE %>%
+  lapply(dplyr::filter, FDR < 0.05) %>%
+  lapply(pull, gs_name) %>%
+  fromList() %>%
+  upset(sets = colnames(.), 
+        nintersects = NA, 
+        keep.order = TRUE, 
+        queries = list(
+          list(query = intersects,
+               params = list("HEK293_Starvation",  "SH-SY5Y_Starvation", "HeLa_Starvation"),
+               color = "orange",
+               active = T),
+        list(query = intersects,
+             params = list("HEK293_AZD8055","HEK293_Starvation", "SH-SY5Y_AZD8055", "SH-SY5Y_Starvation", "HeLa_AZD8055",
+                           "HeLa_Starvation"),
+             color = "red",
+             active = T),
+        list(query = intersects,
+             params = list( "SH-SY5Y_Starvation", "SH-SY5Y_AZD8055"),
+             color = "blue",
+             active = T)
+        ))
+
+```
+```{r goseq_summary}
+goseq_all <- goseqTF_DE_sig %>%
+  Reduce(intersect,.)
+goseq_SY5Y <- goseqTF_DE_sig[str_subset(names(goseqTF_DE_sig), "SH")] %>%
+  Reduce(intersect,.) %>%
+  setdiff(., goseqTF_DE_sig[str_subset(names(goseqTF_DE_sig), "SH", negate = TRUE)] %>%
+            unname() %>%
+            unlist())
+goseq_EBSS <- goseqTF_DE_sig[str_subset(names(goseqTF_DE_sig), "Starvation")] %>%
+  Reduce(intersect,.) %>%
+  setdiff(., goseqTF_DE_sig[str_subset(names(goseqTF_DE_sig), "Starvation", negate = TRUE)] %>%
+            unname() %>%
+            unlist())
+```
+
+```{r orTFT_3_hp, fig.width=12, fig.cap="-log10(Pvalue) of TFT pathways enriched (a) only in SY5Y cell line (b) in all conditions, and (c) only under starvation.*"}
+temp1 <- sapply(names(goseqTF_DE), function(x){
+  goseqTF_DE[[x]] %>%
+    dplyr::filter(gs_name %in% goseq_all, 
+                  FDR < 0.05) %>%
+    mutate(Condition = x, 
+           PValue = -log10(PValue)) %>%
+    dplyr::select(gs_name, PValue , Condition)
+}, simplify = FALSE)
+hp1 <- temp1 %>%
+  bind_rows() %>%
+  ggplot(aes(Condition, 
+             gs_name, fill = PValue)) +
+  geom_tile(aes(fill = PValue), fontsize =3) +
+  scale_fill_viridis(option = "magma", 
+                     name = "-log10(P value)") +
+  theme(
+    axis.title=element_blank(),
+    panel.grid = element_blank(),
+    # axis.ticks = element_blank(),
+    legend.title = element_text(size= 8),
+    legend.key.size = unit(3, 'mm'),
+    axis.text.x = element_text(angle = 45,hjust=1)
+    #   axis.text.y = element_text(colour = col)
+  ) +
+  ggtitle("Over-represented in all conditions")
+temp2 <- sapply(str_subset(names(goseqTF_DE), "SH"), function(x){
+  goseqTF_DE[[x]] %>%
+    dplyr::filter(gs_name %in% goseq_SY5Y, 
+                  FDR < 0.05) %>%
+    mutate(Condition = x, 
+           PValue = -log10(PValue)) %>%
+    dplyr::select(gs_name, PValue, Condition)
+}, simplify = FALSE)
+hp2 <- temp2 %>%
+  bind_rows() %>%
+  ggplot(aes(Condition, 
+             gs_name, fill = PValue)) +
+  geom_tile(aes(fill = PValue), fontsize =3) +
+  scale_fill_viridis(option = "magma", 
+                     name = "-log10(P value)") +
+  theme(
+    axis.title=element_blank(),
+    panel.grid = element_blank(),
+    # axis.ticks = element_blank(),
+    legend.title = element_text(size= 8),
+    legend.key.size = unit(3, 'mm'),
+    axis.text.x = element_text(angle = 45, hjust=1)
+    #   axis.text.y = element_text(colour = col)
+  ) +
+  ggtitle("Over-represented only in SY5Y")
+
+temp3 <- sapply(str_subset(names(goseqTF_DE), "Starvation"), function(x){
+  goseqTF_DE[[x]] %>%
+    dplyr::filter(gs_name %in% goseq_EBSS, 
+                  FDR < 0.05) %>%
+    mutate(Condition = x, 
+           PValue = -log10(PValue)) %>%
+    dplyr::select(gs_name, PValue, Condition)
+}, simplify = FALSE)
+hp3 <- temp3 %>%
+  bind_rows() %>%
+  ggplot(aes(Condition, 
+             gs_name, fill = PValue)) +
+  geom_tile(aes(fill = PValue), fontsize =3) +
+  scale_fill_viridis(option = "magma", 
+                     name = "-log10(P value)") +
+  theme(
+    axis.title=element_blank(),
+    panel.grid = element_blank(),
+    # axis.ticks = element_blank(),
+    legend.title = element_text(size= 8),
+    legend.key.size = unit(3, 'mm'),
+    #   axis.text.y = element_text(colour = col)
+  ) +
+  ggtitle("Over-represented only under starvation")
+# pdf(file = "/Users/wenjunliu/RNA_seq_autophagicflux/Manuscript/Figure/newest/summary_TFT(3hp).pdf",
+#     width = 12,
+#     height = 7)
+plot_grid(hp2, 
+          plot_grid(hp1, hp3, 
+                    nrow = 2, 
+                    rel_heights = c(3,1), 
+                    labels = c("b", "c")), 
+          ncol = 2, 
+          rel_widths  = c(3,5), 
+          labels = c("a", ""))
+# dev.off()
+```
+
+
+### Consistent
+
+Although the `r length(goseq_all)` TFT gene-sests were enriched in all conditions, the DE TFT targets are not consistent across conditions. In the network plot below, only the TF-gene edges that were consistent across all conditions were included. 
+
+```{r Consist_aveFC}
+Consist_aveFC <- DE_genes %>%
+  Reduce(inner_join, .)
+```
+
+```{r consTF_merge, fig.height= 16, fig.width=20, fig.cap="*Regulatory relationships between 9 consistently enriched TFs and DEGs that were perserved across the entire dataset.*"}
+temp <- sapply(names(goseqTF_DE), function(x){
+  goseqTF_DE[[x]] %>%
+  dplyr::filter(gs_name %in% goseq_all) %>%
+  mutate(DE = strsplit(as.character(DE), ";"), 
+         condition = x, 
+         gs_name = str_replace(gs_name, "_TARGET_GENES", "\nTargets")) %>%
+  unnest(DE) %>%
+  dplyr::rename(gene_name = DE) %>%
+  dplyr::select(gs_name,gene_name) %>%
+  unique() 
+}, simplify = FALSE) %>%
+  Reduce(inner_join,.) %>%
+  left_join(Consist_aveFC) %>%
+  mutate(color = case_when(dir == "up" ~"tomato3",
+                   dir == "down" ~ "steelblue3"),
+         type = gs_name) %>%
+  dplyr::rename(from = gs_name, 
+                to = gene_name) %>%
+  .[complete.cases(.),]
+g <- temp %>%
+  .[,c("from", "to", "type")] %>%
+  graph.data.frame()
+TFtoGene <- temp %>%
+  #dplyr::select(gs_name, gene_name) %>%
+    split(f = .$from)
+n <- length(TFtoGene)
+totV <- length(V(g))
+V(g)$type <- "gene"
+V(g)$type[1:n] <- "TF"
+V(g)$color[n+1:totV] <- temp$color
+g %>%
+  ggraph(layout = "fr") +
+  geom_edge_arc(alpha = 1.3,
+                color = "gray",
+                show.legend = FALSE,
+                strength = 0.7, 
+                linemitre = 5, 
+                width = 0.8) +
+  geom_node_point(
+    data = . %>% dplyr::filter(type == "TF"),
+    color = "lightyellow",
+    size = 5,
+    shape = 21,
+    repel = TRUE,
+    stroke = 0.5,
+    show.legend = FALSE) + 
+  geom_node_label(
+    aes_(label = ~name),
+    fill = "lightyellow",
+    data = . %>% dplyr::filter(type == "TF"),
+    repel = TRUE,
+    size = 6,
+    force = 0.2,
+    label.padding = unit(0.35, "lines"), 
+    show.legend = FALSE
+  ) +
+  geom_node_point(
+    aes_(color = ~I(color)),
+    data = . %>% dplyr::filter(type == "gene"),
+    shape = 17,
+    size = 6,
+    stroke = 0.5,
+    repel = TRUE,
+    show.legend = FALSE,
+    alpha = 0.7, 
+  ) +
+  # geom_node_text(
+  #   aes(label = name),
+  #   size = 6,
+  #   data = . %>% dplyr::filter(type == "gene"),
+  #   repel = TRUE,
+  #   colour = "black"
+  # ) +
+  theme(panel.border = element_blank(), 
+        panel.background = element_blank()
+  )
+```
+
+### SH-SY5Y
+
+`r length(goseq_SY5Y)` TFT gene-sets were enriched under both treatments in and only in SH5Y cell line.  In the network plot below, only the TF-gene edges that appeared under both treatments were included. 
+
+```{r SY5Y_aveFC}
+SY5Y_aveFC <- DE_genes[str_subset(names(DE_genes), "SH")] %>%
+  Reduce(inner_join, .)
+```
+
+From the network plot, it's clear that the majority of TFTs belonged to the E2F family and their target genes hugely overlapped. Therefore, those  gene-sets were merged together in the downstream analysis. 
+
+```{r shTF_merge, fig.height=10, fig.width=12, fig.cap="*Regulatory relationships between 21 consistently enriched TFs and DEGs that were identical under both conditions.*"}
+temp <- sapply(c("SH-SY5Y_AZD8055", "SH-SY5Y_Starvation"), function(x){
+  goseqTF_DE[[x]] %>%
+  dplyr::filter(gs_name %in% goseq_SY5Y) %>%
+  mutate(DE = strsplit(as.character(DE), ";"), 
+         condition = x) %>%
+  unnest(DE) %>%
+  dplyr::rename(gene_name = DE) %>%
+  dplyr::select(gs_name,gene_name) %>%
+  unique() 
+}, simplify = FALSE) %>%
+  Reduce(inner_join,.) %>%
+  left_join(SY5Y_aveFC) %>%
+  mutate(color = case_when(dir == "up" ~"tomato3",
+                   dir == "down" ~ "steelblue3"),
+         type = gs_name) %>%
+  dplyr::rename(from = gs_name, 
+                to = gene_name) 
+g <- temp %>%
+  .[,c("from", "to", "type")] %>%
+  graph.data.frame()
+TFtoGene <- temp %>%
+  #dplyr::select(gs_name, gene_name) %>%
+    split(f = .$from)
+n <- length(TFtoGene)
+totV <- length(V(g))
+V(g)$type <- "gene"
+V(g)$type[1:n] <- "TF"
+V(g)$color[n+1:totV] <- temp$color
+ g %>%
+  ggraph(layout = "kk") +
+  geom_edge_arc(alpha = 0.1,
+                
+                show.legend = FALSE,
+                strength = 0.7, 
+                linemitre = 5, 
+                width = 0.8) +
+  geom_node_point(
+    data = . %>% dplyr::filter(type == "TF"),
+    fill = "lightyellow",
+    size = 5,
+    shape = 21,
+    repel = TRUE,
+    stroke = 0.5,
+    show.legend = FALSE) + 
+  geom_node_label(
+    aes_(label = ~name),
+    fill = "lightyellow",
+    data = . %>% dplyr::filter(type == "TF"),
+    repel = TRUE,
+    size = 6,
+    force = 0.2,
+    label.padding = unit(0.35, "lines"), 
+    show.legend = FALSE
+  ) +
+  geom_node_point(
+    aes_(color = ~I(color)),
+    data = . %>% dplyr::filter(type == "gene"),
+    shape = 17,
+    size = 3,
+    stroke = 0.5,
+    repel = TRUE,
+    show.legend = FALSE,
+    alpha = 0.7, 
+  ) +
+  geom_node_text(
+    aes(label = name),
+    size = 4,
+    data = . %>% dplyr::filter(type == "gene"),
+    repel = TRUE,
+    colour = "black"
+  ) +
+  theme(panel.border = element_blank(), 
+        panel.background = element_blank()
+  )
+```
+

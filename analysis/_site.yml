@@ -5,13 +5,30 @@ navbar:
   left:
   - text: Home
     href: index.html
-  - text: About
-    href: about.html
-  - text: License
-    href: license.html
+  - text: Quality Check
+    menu:
+    - text: HeLa
+      href: HeLa_QC.html
+    - text: SH-SY5Y
+      href: SH-SY5Y_QC.html
+    - text: HEK293
+      href: HEK293_QC.html
+  - text: DE
+    menu:
+    - text: Analysis
+      href: DE_analysis.html
+    - text: Summary
+      href: DE_summary.html
+  - text: TFT ORA
+    href: TFT_enrichment.html
+  - text: Pathway Analysis (KEGG)
+    href: Pathway_analysis_KEGG.html
+  - text: TF-KEGG regulation inference
+    href: TF2KEGG_network.html
 output:
   workflowr::wflow_html:
     toc: yes
     toc_float: yes
     theme: cosmo
     highlight: textmate
+    code_folding: hide

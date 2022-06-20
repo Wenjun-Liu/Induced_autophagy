@@ -35,8 +35,21 @@
 <link href="site_libs/tocify-1.9.1/jquery.tocify.css" rel="stylesheet" />
 <script src="site_libs/tocify-1.9.1/jquery.tocify.js"></script>
 <script src="site_libs/navigation-1.1/tabsets.js"></script>
+<script src="site_libs/navigation-1.1/codefolding.js"></script>
 <link href="site_libs/highlightjs-9.12.0/textmate.css" rel="stylesheet" />
 <script src="site_libs/highlightjs-9.12.0/highlight.js"></script>
+<script src="site_libs/htmlwidgets-1.5.4/htmlwidgets.js"></script>
+<link href="site_libs/datatables-css-0.0.0/datatables-crosstalk.css" rel="stylesheet" />
+<script src="site_libs/datatables-binding-0.21/datatables.js"></script>
+<link href="site_libs/dt-core-1.11.3/css/jquery.dataTables.min.css" rel="stylesheet" />
+<link href="site_libs/dt-core-1.11.3/css/jquery.dataTables.extra.css" rel="stylesheet" />
+<script src="site_libs/dt-core-1.11.3/js/jquery.dataTables.min.js"></script>
+<link href="site_libs/nouislider-7.0.10/jquery.nouislider.min.css" rel="stylesheet" />
+<script src="site_libs/nouislider-7.0.10/jquery.nouislider.min.js"></script>
+<link href="site_libs/selectize-0.12.0/selectize.bootstrap3.css" rel="stylesheet" />
+<script src="site_libs/selectize-0.12.0/selectize.min.js"></script>
+<link href="site_libs/crosstalk-1.2.0/css/crosstalk.min.css" rel="stylesheet" />
+<script src="site_libs/crosstalk-1.2.0/js/crosstalk.min.js"></script>
 
 <link rel="icon" href="https://github.com/workflowr/workflowr-assets/raw/main/img/reproducible.png">
 <!-- Add a small amount of space between sections. -->
@@ -234,6 +247,9 @@ $(document).ready(function () {
 </style>
 
 <!-- code folding -->
+<style type="text/css">
+.code-folding-btn { margin-bottom: 4px; }
+</style>
 
 
 
@@ -336,11 +352,47 @@ div.tocify {
         <li>
   <a href="index.html">Home</a>
 </li>
-<li>
-  <a href="about.html">About</a>
+<li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    Quality Check
+     
+    <span class="caret"></span>
+  </a>
+  <ul class="dropdown-menu" role="menu">
+    <li>
+      <a href="HeLa_QC.html">HeLa</a>
+    </li>
+    <li>
+      <a href="SH-SY5Y.html">SH-SY5Y</a>
+    </li>
+    <li>
+      <a href="HEK293.html">HEK293</a>
+    </li>
+  </ul>
+</li>
+<li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    DE
+     
+    <span class="caret"></span>
+  </a>
+  <ul class="dropdown-menu" role="menu">
+    <li>
+      <a href="DE_analysis.html">Analysis</a>
+    </li>
+    <li>
+      <a href="DE_summary">Summary</a>
+    </li>
+  </ul>
 </li>
 <li>
-  <a href="license.html">License</a>
+  <a href="TFT_enrichment.html">TFT ORA</a>
+</li>
+<li>
+  <a href="Pathway_analysis_KEGG.html">Pathway Analysis (KEGG)</a>
+</li>
+<li>
+  <a href="TF2KEGG_network.html">TF-KEGG regulation inference</a>
 </li>
       </ul>
       <ul class="nav navbar-nav navbar-right">
@@ -351,6 +403,14 @@ div.tocify {
 </div><!--/.navbar -->
 
 <div id="header">
+
+<div class="btn-group pull-right float-right">
+<button type="button" class="btn btn-default btn-xs btn-secondary btn-sm dropdown-toggle" data-toggle="dropdown" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false"><span>Code</span> <span class="caret"></span></button>
+<ul class="dropdown-menu dropdown-menu-right" style="min-width: 50px;">
+<li><a id="rmd-show-all-code" href="#">Show All Code</a></li>
+<li><a id="rmd-hide-all-code" href="#">Hide All Code</a></li>
+</ul>
+</div>
 
 
 
@@ -364,7 +424,7 @@ div.tocify {
 <p>
 <button type="button" class="btn btn-default btn-workflowr btn-workflowr-report" data-toggle="collapse" data-target="#workflowr-report">
 <span class="glyphicon glyphicon-list" aria-hidden="true"></span>
-workflowr <span class="glyphicon glyphicon-exclamation-sign text-danger"
+workflowr <span class="glyphicon glyphicon-ok text-success"
 aria-hidden="true"></span>
 </button>
 </p>
@@ -375,8 +435,8 @@ aria-hidden="true"></span>
 </li>
 <li>
 <a data-toggle="tab" href="#checks"> Checks <span
-class="glyphicon glyphicon-exclamation-sign text-danger"
-aria-hidden="true"></span> </a>
+class="glyphicon glyphicon-ok text-success" aria-hidden="true"></span>
+</a>
 </li>
 <li>
 <a data-toggle="tab" href="#versions">Past versions</a>
@@ -385,13 +445,13 @@ aria-hidden="true"></span> </a>
 <div class="tab-content">
 <div id="summary" class="tab-pane fade in active">
 <p>
-<strong>Last updated:</strong> 2022-03-17
+<strong>Last updated:</strong> 2022-03-21
 </p>
 <p>
 <strong>Checks:</strong> <span
-class="glyphicon glyphicon-ok text-success" aria-hidden="true"></span> 6
+class="glyphicon glyphicon-ok text-success" aria-hidden="true"></span> 7
 <span class="glyphicon glyphicon-exclamation-sign text-danger"
-aria-hidden="true"></span> 1
+aria-hidden="true"></span> 0
 </p>
 <p>
 <strong>Knit directory:</strong> <code>Induced_autophagy/</code> <span
@@ -414,21 +474,18 @@ versions</em> tab lists the development history.
 <div class="panel panel-default">
 <div class="panel-heading">
 <p class="panel-title">
-<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongRMarkdownfilestronguncommittedchanges">
-<span class="glyphicon glyphicon-exclamation-sign text-danger"
-aria-hidden="true"></span> <strong>R Markdown file:</strong> uncommitted
-changes </a>
+<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongRMarkdownfilestronguptodate">
+<span class="glyphicon glyphicon-ok text-success"
+aria-hidden="true"></span> <strong>R Markdown file:</strong> up-to-date
+</a>
 </p>
 </div>
-<div id="strongRMarkdownfilestronguncommittedchanges"
+<div id="strongRMarkdownfilestronguptodate"
 class="panel-collapse collapse">
 <div class="panel-body">
-<p>The R Markdown is untracked by Git. To know which version of the R
-Markdown file created these results, you’ll want to first commit it to
-the Git repo. If you’re still working on the analysis, you can ignore
-this warning. When you’re finished, you can run
-<code>wflow_publish</code> to commit the R Markdown file and build the
-HTML.</p>
+<p>Great! Since the R Markdown file has been committed to the Git
+repository, you know the exact version of the code that produced these
+results.</p>
 </div>
 </div>
 </div>
@@ -519,15 +576,15 @@ project makes it easier to run your code on other machines.</p>
 <div class="panel panel-default">
 <div class="panel-heading">
 <p class="panel-title">
-<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongRepositoryversionstrongahrefhttpsgithubcomWenjunLiuInducedautophagytree6ee361ffd25bfe085af3f866757be8cdd5c65b33targetblank6ee361fa">
+<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongRepositoryversionstrongahrefhttpsgithubcomWenjunLiuInducedautophagytree3d30821bbcd1820dd54f77d9953aa474df721c52targetblank3d30821a">
 <span class="glyphicon glyphicon-ok text-success"
 aria-hidden="true"></span> <strong>Repository version:</strong>
-<a href="https://github.com/Wenjun-Liu/Induced_autophagy/tree/6ee361ffd25bfe085af3f866757be8cdd5c65b33" target="_blank">6ee361f</a>
+<a href="https://github.com/Wenjun-Liu/Induced_autophagy/tree/3d30821bbcd1820dd54f77d9953aa474df721c52" target="_blank">3d30821</a>
 </a>
 </p>
 </div>
 <div
-id="strongRepositoryversionstrongahrefhttpsgithubcomWenjunLiuInducedautophagytree6ee361ffd25bfe085af3f866757be8cdd5c65b33targetblank6ee361fa"
+id="strongRepositoryversionstrongahrefhttpsgithubcomWenjunLiuInducedautophagytree3d30821bbcd1820dd54f77d9953aa474df721c52targetblank3d30821a"
 class="panel-collapse collapse">
 <div class="panel-body">
 <p>
@@ -537,7 +594,7 @@ reproducibility.
 </p>
 <p>
 The results in this page were generated with repository version
-<a href="https://github.com/Wenjun-Liu/Induced_autophagy/tree/6ee361ffd25bfe085af3f866757be8cdd5c65b33" target="_blank">6ee361f</a>.
+<a href="https://github.com/Wenjun-Liu/Induced_autophagy/tree/3d30821bbcd1820dd54f77d9953aa474df721c52" target="_blank">3d30821</a>.
 See the <em>Past versions</em> tab to see a history of the changes made
 to the R Markdown and HTML files.
 </p>
@@ -552,16 +609,39 @@ were generated:
 </p>
 <pre><code>
 Ignored files:
+    Ignored:    -TF2KEGG_network_files/
+    Ignored:    .Rhistory
     Ignored:    .Rproj.user/
+    Ignored:    Induced_autophagy.Rproj
+    Ignored:    Pathway_analysis-KEGG-_files/
 
 Untracked files:
-    Untracked:  analysis/HeLa_QC.Rmd
-    Untracked:  data/0_rawData/.DS_Store
-    Untracked:  data/0_rawData/FastQC/.DS_Store
-    Untracked:  data/0_rawData/FastQC/A10_S73_R2_fastqc/
+    Untracked:  -TF2KEGG_network.Rmd
+    Untracked:  analysis/DE_summary.Rmd
+    Untracked:  analysis/Pathway_analysis_KEGG.Rmd
+    Untracked:  analysis/TF2KEGG_network.Rmd
+    Untracked:  analysis/TFT_enrichment.Rmd
+    Untracked:  data/2_alignedData/featureCounts/rawCounts.rds
+    Untracked:  output/BminsI.Rda
+    Untracked:  output/DE_genes.rds
+    Untracked:  output/TF_KEGG/
+    Untracked:  output/dgeByCon.rds
+    Untracked:  output/goseqTF_DE.Rda
+    Untracked:  output/goseq_kegg.rds
+    Untracked:  output/kgToGene.rds
+    Untracked:  output/spia_netPer.Rda
+    Untracked:  output/spia_net_permut.Rda
+    Untracked:  output/topTables/
+    Untracked:  site_libs/
 
 Unstaged changes:
-    Deleted:    analysis/1_HELAcell.Rmd
+    Modified:   README.md
+    Deleted:    analysis/12_metaDEcopy.Rmd
+    Modified:   analysis/DE_analysis.Rmd
+    Modified:   analysis/_site.yml
+    Deleted:    analysis/about.Rmd
+    Modified:   analysis/index.Rmd
+    Deleted:    data/dgeList.rda
 
 </code></pre>
 <p>
@@ -576,10 +656,74 @@ have uncommitted changes.
 <hr>
 </div>
 <div id="versions" class="tab-pane fade">
+
 <p>
-There are no past versions. Publish this analysis with
-<code>wflow_publish()</code> to start tracking its development.
+These are the previous versions of the repository in which changes were
+made to the R Markdown (<code>analysis/HeLa_QC.Rmd</code>) and HTML
+(<code>docs/HeLa_QC.html</code>) files. If you’ve configured a remote
+Git repository (see <code>?wflow_git_remote</code>), click on the
+hyperlinks in the table below to view the files as they were in that
+past version.
 </p>
+<div class="table-responsive">
+<table class="table table-condensed table-hover">
+<thead>
+<tr>
+<th>
+File
+</th>
+<th>
+Version
+</th>
+<th>
+Author
+</th>
+<th>
+Date
+</th>
+<th>
+Message
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+Rmd
+</td>
+<td>
+<a href="https://github.com/Wenjun-Liu/Induced_autophagy/blob/3d30821bbcd1820dd54f77d9953aa474df721c52/analysis/HeLa_QC.Rmd" target="_blank">3d30821</a>
+</td>
+<td>
+Wenjun-Liu
+</td>
+<td>
+2022-03-18
+</td>
+<td>
+half way through tidying up the DE analysis
+</td>
+</tr>
+<tr>
+<td>
+html
+</td>
+<td>
+<a href="https://rawcdn.githack.com/Wenjun-Liu/Induced_autophagy/3d30821bbcd1820dd54f77d9953aa474df721c52/docs/HeLa_QC.html" target="_blank">3d30821</a>
+</td>
+<td>
+Wenjun-Liu
+</td>
+<td>
+2022-03-18
+</td>
+<td>
+half way through tidying up the DE analysis
+</td>
+</tr>
+</tbody>
+</table>
+</div>
 <hr>
 </div>
 </div>
@@ -606,7 +750,8 @@ library(kableExtra)
 library(plotly)
 library(reshape2)
 library(org.Hs.eg.db)
-library(cqn)</code></pre>
+library(cqn)
+library(DT)</code></pre>
 <pre class="r"><code>theme_set(theme_bw())
 panderOptions(&quot;table.split.table&quot;, Inf)
 panderOptions(&quot;table.style&quot;, &quot;rmarkdown&quot;)
@@ -637,7 +782,8 @@ mcols(grGenes) %&lt;&gt;%
   as.data.frame() %&gt;%
   DataFrame()</code></pre>
 <p>Metadata of each fastq file and each sample was loaded. In this
-analysis, only HeLa samples were investigated. 　</p>
+analysis, only HeLa samples were investigated. Metadata of all HeLa
+samples could be explored through the table below:</p>
 <pre class="r"><code>metadata &lt;- here::here(&quot;data&quot;, &quot;metadata.txt&quot;) %&gt;%
   read.table(header = TRUE, sep = &quot;\t&quot;,stringsAsFactors = FALSE) %&gt;% 
   as_tibble()%&gt;%
@@ -653,7 +799,20 @@ labels &lt;- structure(
 # extract information for Hela cell line
 helaSequence &lt;- subset(filename, CELL == &quot;HeLa.tfLC3&quot;)$Filename
 hela_metadata &lt;- metadata %&gt;%
-  dplyr::filter(CELL == &quot;HeLa.tfLC3&quot;)</code></pre>
+  dplyr::filter(CELL == &quot;HeLa.tfLC3&quot;)
+hela_metadata %&gt;%
+  dplyr::select(
+    `Cell line` = CELL, 
+    Treatment = TREAT, 
+    Time = TIME, 
+    sample, 
+    RG.ratio
+  ) %&gt;%
+  datatable(filter = &quot;top&quot;)</code></pre>
+<div id="htmlwidget-7f1368cff9d23946c839" style="width:100%;height:auto;" class="datatables html-widget"></div>
+<script type="application/json" data-for="htmlwidget-7f1368cff9d23946c839">{"x":{"filter":"top","vertical":false,"filterHTML":"<tr>\n  <td><\/td>\n  <td data-type=\"disabled\" style=\"vertical-align: top;\">\n    <div class=\"form-group has-feedback\" style=\"margin-bottom: auto;\">\n      <input type=\"search\" placeholder=\"All\" class=\"form-control\" style=\"width: 100%;\"/>\n      <span class=\"glyphicon glyphicon-remove-circle form-control-feedback\"><\/span>\n    <\/div>\n  <\/td>\n  <td data-type=\"factor\" style=\"vertical-align: top;\">\n    <div class=\"form-group has-feedback\" style=\"margin-bottom: auto;\">\n      <input type=\"search\" placeholder=\"All\" class=\"form-control\" style=\"width: 100%;\"/>\n      <span class=\"glyphicon glyphicon-remove-circle form-control-feedback\"><\/span>\n    <\/div>\n    <div style=\"width: 100%; display: none;\">\n      <select multiple=\"multiple\" style=\"width: 100%;\" data-options=\"[&quot;AZD8055&quot;,&quot;DMEM&quot;,&quot;DMSO&quot;,&quot;EBSS&quot;]\"><\/select>\n    <\/div>\n  <\/td>\n  <td data-type=\"factor\" style=\"vertical-align: top;\">\n    <div class=\"form-group has-feedback\" style=\"margin-bottom: auto;\">\n      <input type=\"search\" placeholder=\"All\" class=\"form-control\" style=\"width: 100%;\"/>\n      <span class=\"glyphicon glyphicon-remove-circle form-control-feedback\"><\/span>\n    <\/div>\n    <div style=\"width: 100%; display: none;\">\n      <select multiple=\"multiple\" style=\"width: 100%;\" data-options=\"[&quot;0&quot;,&quot;1&quot;,&quot;15&quot;,&quot;30&quot;]\"><\/select>\n    <\/div>\n  <\/td>\n  <td data-type=\"character\" style=\"vertical-align: top;\">\n    <div class=\"form-group has-feedback\" style=\"margin-bottom: auto;\">\n      <input type=\"search\" placeholder=\"All\" class=\"form-control\" style=\"width: 100%;\"/>\n      <span class=\"glyphicon glyphicon-remove-circle form-control-feedback\"><\/span>\n    <\/div>\n  <\/td>\n  <td data-type=\"number\" style=\"vertical-align: top;\">\n    <div class=\"form-group has-feedback\" style=\"margin-bottom: auto;\">\n      <input type=\"search\" placeholder=\"All\" class=\"form-control\" style=\"width: 100%;\"/>\n      <span class=\"glyphicon glyphicon-remove-circle form-control-feedback\"><\/span>\n    <\/div>\n    <div style=\"display: none;position: absolute;width: 200px;opacity: 1\">\n      <div data-min=\"0.873480243161094\" data-max=\"3.49038461538462\" data-scale=\"15\"><\/div>\n      <span style=\"float: left;\"><\/span>\n      <span style=\"float: right;\"><\/span>\n    <\/div>\n  <\/td>\n<\/tr>","data":[["1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","19","20","21","22","23","24","25","26","27","28","29","30"],["HeLa.tfLC3","HeLa.tfLC3","HeLa.tfLC3","HeLa.tfLC3","HeLa.tfLC3","HeLa.tfLC3","HeLa.tfLC3","HeLa.tfLC3","HeLa.tfLC3","HeLa.tfLC3","HeLa.tfLC3","HeLa.tfLC3","HeLa.tfLC3","HeLa.tfLC3","HeLa.tfLC3","HeLa.tfLC3","HeLa.tfLC3","HeLa.tfLC3","HeLa.tfLC3","HeLa.tfLC3","HeLa.tfLC3","HeLa.tfLC3","HeLa.tfLC3","HeLa.tfLC3","HeLa.tfLC3","HeLa.tfLC3","HeLa.tfLC3","HeLa.tfLC3","HeLa.tfLC3","HeLa.tfLC3"],["DMSO","DMSO","DMSO","DMSO","DMSO","DMSO","AZD8055","AZD8055","AZD8055","AZD8055","AZD8055","DMEM","AZD8055","AZD8055","AZD8055","AZD8055","DMEM","DMEM","DMEM","DMEM","EBSS","EBSS","EBSS","EBSS","DMEM","EBSS","EBSS","EBSS","EBSS","EBSS"],["0","0","30","0","30","30","1","1","15","30","30","0","1","15","15","30","0","0","30","30","1","15","15","30","30","1","1","15","30","30"],["C04_S27","C05_S35","C06_S43","C10_S75","C11_S83","C12_S91","D01_S4","D02_S12","D03_S20","D04_S28","D05_S36","D06_S44","D07_S52","D08_S60","D09_S68","D10_S76","D11_S84","D12_S92","E01_S5","E02_S13","E03_S21","E04_S29","E05_S37","E06_S45","E07_S53","E08_S61","E09_S69","E10_S77","E11_S85","E12_S93"],[0.884497313891021,0.87681713848508,0.874244712990937,0.875757575757576,0.915327322618581,0.880122558406741,0.899610894941634,0.873480243161094,1.17562557924004,1.16988586479368,1.22186346863469,0.979447200566974,0.933811802232855,1.16596931659693,1.17158931082982,1.16498464238701,0.997112955611692,1.01760821716801,1.09513274336283,1.06585540443808,1.16397621070518,2.10297166551486,2.24017467248908,3.30578512396694,1.07988587731812,1.2145979020979,1.19115789473684,2.12657342657343,3.43770314192849,3.49038461538462]],"container":"<table class=\"display\">\n  <thead>\n    <tr>\n      <th> <\/th>\n      <th>Cell line<\/th>\n      <th>Treatment<\/th>\n      <th>Time<\/th>\n      <th>sample<\/th>\n      <th>RG.ratio<\/th>\n    <\/tr>\n  <\/thead>\n<\/table>","options":{"columnDefs":[{"className":"dt-right","targets":5},{"orderable":false,"targets":0}],"order":[],"autoWidth":false,"orderClasses":false,"orderCellsTop":true}},"evals":[],"jsHooks":[]}</script>
+<p>There are in total 30 HeLa samples. Study design is illustrated
+through the figure embedded in the home page.</p>
 <p>To perform quality control, GC content and length of each 250,194
 transcripts are derived from Ensembl release 98 using the
 <code>AnnotationHub</code> package. RNA-seq data provided are pair-end
@@ -671,11 +830,48 @@ Hela_r1 &lt;- r1 &amp; Hela
 Hela_r2 &lt;- Hela != Hela_r1
 plotReadTotals(rawFqc[Hela_r1], labels = labels[Hela_r1])</code></pre>
 <div class="figure" style="text-align: center">
-<img src="figure/HeLa_QC.Rmd/plotLibSizes-1.png" alt="*Library Sizes for Hela Cell Line samples before any processing was undertaken.*" width="672" />
+<img src="figure/HeLa_QC.Rmd/plotLibSizes-1.png" alt="*Library Sizes for Hela Cell Line samples before any processing was undertaken.*" width="960" />
 <p class="caption">
 <em>Library Sizes for Hela Cell Line samples before any processing was
 undertaken.</em>
 </p>
+</div>
+<p>
+<button type="button" class="btn btn-default btn-xs btn-workflowr btn-workflowr-fig" data-toggle="collapse" data-target="#fig-plotLibSizes-1">
+Past versions of plotLibSizes-1.png
+</button>
+</p>
+<div id="fig-plotLibSizes-1" class="collapse">
+<div class="table-responsive">
+<table class="table table-condensed table-hover">
+<thead>
+<tr>
+<th>
+Version
+</th>
+<th>
+Author
+</th>
+<th>
+Date
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<a href="https://github.com/Wenjun-Liu/Induced_autophagy/blob/3d30821bbcd1820dd54f77d9953aa474df721c52/docs/figure/HeLa_QC.Rmd/plotLibSizes-1.png" target="_blank">3d30821</a>
+</td>
+<td>
+Wenjun-Liu
+</td>
+<td>
+2022-03-18
+</td>
+</tr>
+</tbody>
+</table>
+</div>
 </div>
 <p>Library Sizes for the raw, unprocessed dataset ranged between
 <em>102,227,614</em> and <em>179,424,990</em> reads among HeLa
@@ -939,12 +1135,49 @@ plot_grid(
     rel_heights = c(5,2)
 )</code></pre>
 <div class="figure" style="text-align: center">
-<img src="figure/HeLa_QC.Rmd/gcPlots-1.png" alt="*GC content for Hela Cells R1 and R2 reads. Both of the graphs show a large peak and a small spike in GC content at around 65% and 83% respectively, wich might resulted from incomplete rRNA depletion." width="672" />
+<img src="figure/HeLa_QC.Rmd/gcPlots-1.png" alt="*GC content for Hela Cells R1 and R2 reads. Both of the graphs show a large peak and a small spike in GC content at around 65% and 83% respectively, wich might resulted from incomplete rRNA depletion." width="960" />
 <p class="caption">
 *GC content for Hela Cells R1 and R2 reads. Both of the graphs show a
 large peak and a small spike in GC content at around 65% and 83%
 respectively, wich might resulted from incomplete rRNA depletion.
 </p>
+</div>
+<p>
+<button type="button" class="btn btn-default btn-xs btn-workflowr btn-workflowr-fig" data-toggle="collapse" data-target="#fig-gcPlots-1">
+Past versions of gcPlots-1.png
+</button>
+</p>
+<div id="fig-gcPlots-1" class="collapse">
+<div class="table-responsive">
+<table class="table table-condensed table-hover">
+<thead>
+<tr>
+<th>
+Version
+</th>
+<th>
+Author
+</th>
+<th>
+Date
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<a href="https://github.com/Wenjun-Liu/Induced_autophagy/blob/3d30821bbcd1820dd54f77d9953aa474df721c52/docs/figure/HeLa_QC.Rmd/gcPlots-1.png" target="_blank">3d30821</a>
+</td>
+<td>
+Wenjun-Liu
+</td>
+<td>
+2022-03-18
+</td>
+</tr>
+</tbody>
+</table>
+</div>
 </div>
 <pre class="r"><code>gc &lt;- getModule(rawFqc[Hela], &quot;Per_sequence_GC&quot;) 
 rawGC &lt;- gc %&gt;% 
@@ -967,6 +1200,43 @@ rawGC %&gt;%
 known theoretical distribution, this should be 3.65% of the total
 library.</em>
 </p>
+</div>
+<p>
+<button type="button" class="btn btn-default btn-xs btn-workflowr btn-workflowr-fig" data-toggle="collapse" data-target="#fig-gcPerc-1">
+Past versions of gcPerc-1.png
+</button>
+</p>
+<div id="fig-gcPerc-1" class="collapse">
+<div class="table-responsive">
+<table class="table table-condensed table-hover">
+<thead>
+<tr>
+<th>
+Version
+</th>
+<th>
+Author
+</th>
+<th>
+Date
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<a href="https://github.com/Wenjun-Liu/Induced_autophagy/blob/3d30821bbcd1820dd54f77d9953aa474df721c52/docs/figure/HeLa_QC.Rmd/gcPerc-1.png" target="_blank">3d30821</a>
+</td>
+<td>
+Wenjun-Liu
+</td>
+<td>
+2022-03-18
+</td>
+</tr>
+</tbody>
+</table>
+</div>
 </div>
 </div>
 </div>
@@ -1018,6 +1288,7 @@ dgeList &lt;- here::here(&quot;data&quot;, &quot;2_alignedData&quot;, &quot;feat
   ) %&gt;%
   .[!grepl(&quot;rRNA&quot;, .$genes$gene_biotype),] %&gt;%
   calcNormFactors()
+#save(dgeList, here::here(&quot;data/dgeList.rda&quot;))
 hela_cell &lt;- grepl(paste(unique(hela_metadata$sample), collapse=&quot;|&quot;),dgeList$samples$sample)  
 hela_dgeList &lt;- dgeList[,hela_cell]
 hela_dgeList %&lt;&gt;% .[rowSums(cpm(.) &gt;= minCPM) &gt;= minSamples,]</code></pre>
@@ -1072,6 +1343,43 @@ with total library sizes between <em>61,775,578</em> and
 logCPM values.</em>
 </p>
 </div>
+<p>
+<button type="button" class="btn btn-default btn-xs btn-workflowr btn-workflowr-fig" data-toggle="collapse" data-target="#fig-plotDensities-1">
+Past versions of plotDensities-1.png
+</button>
+</p>
+<div id="fig-plotDensities-1" class="collapse">
+<div class="table-responsive">
+<table class="table table-condensed table-hover">
+<thead>
+<tr>
+<th>
+Version
+</th>
+<th>
+Author
+</th>
+<th>
+Date
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<a href="https://github.com/Wenjun-Liu/Induced_autophagy/blob/3d30821bbcd1820dd54f77d9953aa474df721c52/docs/figure/HeLa_QC.Rmd/plotDensities-1.png" target="_blank">3d30821</a>
+</td>
+<td>
+Wenjun-Liu
+</td>
+<td>
+2022-03-18
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
 <div id="cell-line-labelling-checking" class="section level2">
 <h2>Cell line labelling checking</h2>
 <p>To check if there was any potential sample mis-labeling, a principle
@@ -1109,6 +1417,43 @@ contro_pcaVars &lt;- percent_format(0.1)(summary(contro_pca)$importance[&quot;Pr
 <p class="caption">
 <em>PCA of all control HeLa cells’ gene-level counts.</em>
 </p>
+</div>
+<p>
+<button type="button" class="btn btn-default btn-xs btn-workflowr btn-workflowr-fig" data-toggle="collapse" data-target="#fig-plotPCA-1">
+Past versions of plotPCA-1.png
+</button>
+</p>
+<div id="fig-plotPCA-1" class="collapse">
+<div class="table-responsive">
+<table class="table table-condensed table-hover">
+<thead>
+<tr>
+<th>
+Version
+</th>
+<th>
+Author
+</th>
+<th>
+Date
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<a href="https://github.com/Wenjun-Liu/Induced_autophagy/blob/3d30821bbcd1820dd54f77d9953aa474df721c52/docs/figure/HeLa_QC.Rmd/plotPCA-1.png" target="_blank">3d30821</a>
+</td>
+<td>
+Wenjun-Liu
+</td>
+<td>
+2022-03-18
+</td>
+</tr>
+</tbody>
+</table>
+</div>
 </div>
 <p>This PCA plot shows that samples of different cell lines were
 clustered at different spots, hence no mislablleing was identified at
@@ -1246,6 +1591,43 @@ lines are shown along with standard error bands for each
 comparison.</em>
 </p>
 </div>
+<p>
+<button type="button" class="btn btn-default btn-xs btn-workflowr btn-workflowr-fig" data-toggle="collapse" data-target="#fig-plotBias-1">
+Past versions of plotBias-1.png
+</button>
+</p>
+<div id="fig-plotBias-1" class="collapse">
+<div class="table-responsive">
+<table class="table table-condensed table-hover">
+<thead>
+<tr>
+<th>
+Version
+</th>
+<th>
+Author
+</th>
+<th>
+Date
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<a href="https://github.com/Wenjun-Liu/Induced_autophagy/blob/3d30821bbcd1820dd54f77d9953aa474df721c52/docs/figure/HeLa_QC.Rmd/plotBias-1.png" target="_blank">3d30821</a>
+</td>
+<td>
+Wenjun-Liu
+</td>
+<td>
+2022-03-18
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
 </div>
 <div id="initial-pca" class="section level2">
 <h2>Initial PCA</h2>
@@ -1280,12 +1662,49 @@ hela_pcaVars &lt;- percent_format(0.1)(summary(hela_pca)$importance[&quot;Propor
         addCoef.col = 1, addCoefasPercent = TRUE
     )</code></pre>
 <div class="figure" style="text-align: center">
-<img src="figure/HeLa_QC.Rmd/pcaCorrs-1.png" alt="*Correlations between the first three principal components and measured variables. Cell type, time and treatments were converted to an ordered categorical variable for the purposes of visualisation*" width="672" />
+<img src="figure/HeLa_QC.Rmd/pcaCorrs-1.png" alt="*Correlations between the first three principal components and measured variables. Cell type, time and treatments were converted to an ordered categorical variable for the purposes of visualisation*" width="960" />
 <p class="caption">
 <em>Correlations between the first three principal components and
 measured variables. Cell type, time and treatments were converted to an
 ordered categorical variable for the purposes of visualisation</em>
 </p>
+</div>
+<p>
+<button type="button" class="btn btn-default btn-xs btn-workflowr btn-workflowr-fig" data-toggle="collapse" data-target="#fig-pcaCorrs-1">
+Past versions of pcaCorrs-1.png
+</button>
+</p>
+<div id="fig-pcaCorrs-1" class="collapse">
+<div class="table-responsive">
+<table class="table table-condensed table-hover">
+<thead>
+<tr>
+<th>
+Version
+</th>
+<th>
+Author
+</th>
+<th>
+Date
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<a href="https://github.com/Wenjun-Liu/Induced_autophagy/blob/3d30821bbcd1820dd54f77d9953aa474df721c52/docs/figure/HeLa_QC.Rmd/pcaCorrs-1.png" target="_blank">3d30821</a>
+</td>
+<td>
+Wenjun-Liu
+</td>
+<td>
+2022-03-18
+</td>
+</tr>
+</tbody>
+</table>
+</div>
 </div>
 <p>Strong correlations between GC content, gene length and PC1 were
 observed, meaning those systematic artefacts would most likely have
@@ -1392,6 +1811,43 @@ samples and corresponding controls. Plots were colored by time point
 while shape represent shapes</em>
 </p>
 </div>
+<p>
+<button type="button" class="btn btn-default btn-xs btn-workflowr btn-workflowr-fig" data-toggle="collapse" data-target="#fig-INIplotPCA-1">
+Past versions of INIplotPCA-1.png
+</button>
+</p>
+<div id="fig-INIplotPCA-1" class="collapse">
+<div class="table-responsive">
+<table class="table table-condensed table-hover">
+<thead>
+<tr>
+<th>
+Version
+</th>
+<th>
+Author
+</th>
+<th>
+Date
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<a href="https://github.com/Wenjun-Liu/Induced_autophagy/blob/3d30821bbcd1820dd54f77d9953aa474df721c52/docs/figure/HeLa_QC.Rmd/INIplotPCA-1.png" target="_blank">3d30821</a>
+</td>
+<td>
+Wenjun-Liu
+</td>
+<td>
+2022-03-18
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
 <p>In the pervious quality control step, it was identified that
 gene-length was strongly correlated with PC1 and GC content had a
 relatively strong correlation with both PC1 and PC2. Therefore,
@@ -1441,11 +1897,48 @@ time. The design matrix is visualised as a heatmap.</p>
 <em>Visualisation of the design matrix d</em>
 </p>
 </div>
+<p>
+<button type="button" class="btn btn-default btn-xs btn-workflowr btn-workflowr-fig" data-toggle="collapse" data-target="#fig-mmVisualisation-1">
+Past versions of mmVisualisation-1.png
+</button>
+</p>
+<div id="fig-mmVisualisation-1" class="collapse">
+<div class="table-responsive">
+<table class="table table-condensed table-hover">
+<thead>
+<tr>
+<th>
+Version
+</th>
+<th>
+Author
+</th>
+<th>
+Date
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<a href="https://github.com/Wenjun-Liu/Induced_autophagy/blob/3d30821bbcd1820dd54f77d9953aa474df721c52/docs/figure/HeLa_QC.Rmd/mmVisualisation-1.png" target="_blank">3d30821</a>
+</td>
+<td>
+Wenjun-Liu
+</td>
+<td>
+2022-03-18
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
 <pre class="r"><code>helaContr_cell &lt;- grepl(paste(dplyr::filter(hela_metadata, TREAT %in% c(&quot;DMEM&quot;, &quot;DMSO&quot;))$sample, collapse=&quot;|&quot;),hela_dgeList$samples$sample)
 helaContro_dgeList &lt;- hela_dgeList[,helaContr_cell]
 helaContro_dgeList%&lt;&gt;% estimateDisp(design = d)</code></pre>
-<pre class="r"><code>alpha &lt;- 0.05
-minLfc &lt;- 1.2
+<pre class="r"><code>alpha &lt;- 0.01
+minLfc &lt;- log2(2)
 fit &lt;- glmFit(helaContro_dgeList)
 topTables_helaContr &lt;- colnames(d)[2:4] %&gt;%
   sapply(function(x){
@@ -1480,9 +1973,9 @@ effectively compares: 1. 0hr DMSO treated cells vs 0H DMEM treated cells
 between 0 and 30 hrs DMSO treated cells vs differences between 0 and 30
 hrs DMEM treated cells</p>
 <p>Genes were considered to be DE using: a. A Bonferroni-adjusted
-p-value &lt; 0.05 b. An FDR-adjusted p-value &lt; 0.05 along with an
+p-value &lt; 0.01 b. An FDR-adjusted p-value &lt; 0.01 along with an
 estimated logFC outside of the range <span class="math inline">\(\pm
-\log_2(2.2973967)\)</span>.</p>
+\log_2(2)\)</span>.</p>
 <p>Using these criteria, the following initial DE gene-sets were defined
 among control samples:</p>
 <pre class="r"><code>topTables_helaContr %&gt;%
@@ -1499,9 +1992,9 @@ among control samples:</p>
 </thead>
 <tbody>
 <tr class="odd">
-<td align="center">464</td>
-<td align="center">183</td>
-<td align="center">143</td>
+<td align="center">364</td>
+<td align="center">135</td>
+<td align="center">110</td>
 </tr>
 </tbody>
 </table>
@@ -1551,6 +2044,43 @@ for the entire duration.</p>
 <em>Plot of Hela cells’ RG ratio (autophagic flux)</em>
 </p>
 </div>
+<p>
+<button type="button" class="btn btn-default btn-xs btn-workflowr btn-workflowr-fig" data-toggle="collapse" data-target="#fig-RGplotPCA-1">
+Past versions of RGplotPCA-1.png
+</button>
+</p>
+<div id="fig-RGplotPCA-1" class="collapse">
+<div class="table-responsive">
+<table class="table table-condensed table-hover">
+<thead>
+<tr>
+<th>
+Version
+</th>
+<th>
+Author
+</th>
+<th>
+Date
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<a href="https://github.com/Wenjun-Liu/Induced_autophagy/blob/3d30821bbcd1820dd54f77d9953aa474df721c52/docs/figure/HeLa_QC.Rmd/RGplotPCA-1.png" target="_blank">3d30821</a>
+</td>
+<td>
+Wenjun-Liu
+</td>
+<td>
+2022-03-18
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
 <br>
 <p>
 <button type="button" class="btn btn-default btn-workflowr btn-workflowr-sessioninfo" data-toggle="collapse" data-target="#workflowr-sessioninfo" style="display: block;">
@@ -1576,48 +2106,48 @@ attached base packages:
 [8] methods   base     
 
 other attached packages:
- [1] cqn_1.40.0              quantreg_5.88           SparseM_1.81           
- [4] preprocessCore_1.56.0   nor1mix_1.3-0           mclust_5.4.9           
- [7] org.Hs.eg.db_3.14.0     reshape2_1.4.4          plotly_4.10.0          
-[10] kableExtra_1.3.4        goseq_1.46.0            geneLenDataBase_1.30.0 
-[13] BiasedUrn_1.07          GO.db_3.14.0            msigdbr_7.4.1          
-[16] UpSetR_1.4.0            pheatmap_1.0.12         RColorBrewer_1.1-2     
-[19] ggrepel_0.9.1           corrplot_0.92           cowplot_1.1.1          
-[22] pander_0.6.4            scales_1.1.1            ensembldb_2.18.3       
-[25] AnnotationFilter_1.18.0 GenomicFeatures_1.46.5  AnnotationDbi_1.56.2   
-[28] Biobase_2.54.0          GenomicRanges_1.46.1    GenomeInfoDb_1.30.1    
-[31] IRanges_2.28.0          S4Vectors_0.32.3        AnnotationHub_3.2.2    
-[34] BiocFileCache_2.2.1     dbplyr_2.1.1            edgeR_3.36.0           
-[37] limma_3.50.1            magrittr_2.0.2          forcats_0.5.1          
-[40] stringr_1.4.0           dplyr_1.0.8             purrr_0.3.4            
-[43] readr_2.1.2             tidyr_1.2.0             tidyverse_1.3.1        
-[46] ngsReports_1.10.0       tibble_3.1.6            ggplot2_3.3.5          
-[49] BiocGenerics_0.40.0     workflowr_1.7.0        
+ [1] DT_0.21                 cqn_1.40.0              quantreg_5.88          
+ [4] SparseM_1.81            preprocessCore_1.56.0   nor1mix_1.3-0          
+ [7] mclust_5.4.9            org.Hs.eg.db_3.14.0     reshape2_1.4.4         
+[10] plotly_4.10.0           kableExtra_1.3.4        goseq_1.46.0           
+[13] geneLenDataBase_1.30.0  BiasedUrn_1.07          GO.db_3.14.0           
+[16] msigdbr_7.4.1           UpSetR_1.4.0            pheatmap_1.0.12        
+[19] RColorBrewer_1.1-2      ggrepel_0.9.1           corrplot_0.92          
+[22] cowplot_1.1.1           pander_0.6.4            scales_1.1.1           
+[25] ensembldb_2.18.3        AnnotationFilter_1.18.0 GenomicFeatures_1.46.5 
+[28] AnnotationDbi_1.56.2    Biobase_2.54.0          GenomicRanges_1.46.1   
+[31] GenomeInfoDb_1.30.1     IRanges_2.28.0          S4Vectors_0.32.3       
+[34] AnnotationHub_3.2.2     BiocFileCache_2.2.1     dbplyr_2.1.1           
+[37] edgeR_3.36.0            limma_3.50.1            magrittr_2.0.2         
+[40] forcats_0.5.1           stringr_1.4.0           dplyr_1.0.8            
+[43] purrr_0.3.4             readr_2.1.2             tidyr_1.2.0            
+[46] tidyverse_1.3.1         ngsReports_1.10.0       tibble_3.1.6           
+[49] ggplot2_3.3.5           BiocGenerics_0.40.0     workflowr_1.7.0        
 
 loaded via a namespace (and not attached):
   [1] utf8_1.2.2                    tidyselect_1.1.2             
   [3] RSQLite_2.2.10                htmlwidgets_1.5.4            
   [5] grid_4.1.3                    BiocParallel_1.28.3          
-  [7] munsell_0.5.0                 DT_0.21                      
-  [9] withr_2.5.0                   colorspace_2.0-3             
- [11] filelock_1.0.2                highr_0.9                    
- [13] knitr_1.37                    rstudioapi_0.13              
- [15] MatrixGenerics_1.6.0          labeling_0.4.2               
- [17] git2r_0.29.0                  GenomeInfoDbData_1.2.7       
- [19] farver_2.1.0                  bit64_4.0.5                  
- [21] rprojroot_2.0.2               vctrs_0.3.8                  
- [23] generics_0.1.2                xfun_0.30                    
- [25] R6_2.5.1                      locfit_1.5-9.5               
- [27] bitops_1.0-7                  cachem_1.0.6                 
- [29] DelayedArray_0.20.0           assertthat_0.2.1             
- [31] vroom_1.5.7                   promises_1.2.0.1             
- [33] BiocIO_1.4.0                  nnet_7.3-17                  
- [35] gtable_0.3.0                  processx_3.5.2               
- [37] rlang_1.0.2                   MatrixModels_0.5-0           
- [39] systemfonts_1.0.4             rtracklayer_1.54.0           
- [41] lazyeval_0.2.2                checkmate_2.0.0              
- [43] broom_0.7.12                  BiocManager_1.30.16          
- [45] yaml_2.3.5                    modelr_0.1.8                 
+  [7] munsell_0.5.0                 withr_2.5.0                  
+  [9] colorspace_2.0-3              filelock_1.0.2               
+ [11] highr_0.9                     knitr_1.37                   
+ [13] rstudioapi_0.13               labeling_0.4.2               
+ [15] MatrixGenerics_1.6.0          git2r_0.29.0                 
+ [17] GenomeInfoDbData_1.2.7        farver_2.1.0                 
+ [19] bit64_4.0.5                   rprojroot_2.0.2              
+ [21] vctrs_0.3.8                   generics_0.1.2               
+ [23] xfun_0.30                     R6_2.5.1                     
+ [25] locfit_1.5-9.5                bitops_1.0-7                 
+ [27] cachem_1.0.6                  DelayedArray_0.20.0          
+ [29] assertthat_0.2.1              vroom_1.5.7                  
+ [31] promises_1.2.0.1              BiocIO_1.4.0                 
+ [33] nnet_7.3-17                   gtable_0.3.0                 
+ [35] processx_3.5.2                rlang_1.0.2                  
+ [37] MatrixModels_0.5-0            systemfonts_1.0.4            
+ [39] rtracklayer_1.54.0            lazyeval_0.2.2               
+ [41] checkmate_2.0.0               broom_0.7.12                 
+ [43] BiocManager_1.30.16           yaml_2.3.5                   
+ [45] modelr_0.1.8                  crosstalk_1.2.0              
  [47] backports_1.4.1               httpuv_1.6.5                 
  [49] Hmisc_4.6-0                   tools_4.1.3                  
  [51] ellipsis_0.3.2                jquerylib_0.1.4              
@@ -1717,6 +2247,11 @@ $(document).ready(function () {
 </script>
 
 <!-- code folding -->
+<script>
+$(document).ready(function () {
+  window.initializeCodeFolding("hide" === "show");
+});
+</script>
 
 <script>
 $(document).ready(function ()  {

@@ -8,4 +8,7 @@ editor_options:
   chunk_output_type: console
 ---
 
-Welcome to my research website.
+
+Analysis of RNA-seq data generated from three human cell line (HeLa, HEK293 and SH-SY5Y) where autophagy was induced through two ways: mTOR inhibition and starvation.
+
+Control samples were collected at 0 and 30 hrs, while treated samples were collected at 1, 15 and 30 hrs. 

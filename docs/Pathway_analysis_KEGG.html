@@ -1,0 +1,1690 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+
+
+<meta name="date" content="2022-03-20" />
+
+<title>Pathway_analysis_KEGG</title>
+
+<script src="site_libs/header-attrs-2.13/header-attrs.js"></script>
+<script src="site_libs/jquery-3.6.0/jquery-3.6.0.min.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link href="site_libs/bootstrap-3.3.5/css/cosmo.min.css" rel="stylesheet" />
+<script src="site_libs/bootstrap-3.3.5/js/bootstrap.min.js"></script>
+<script src="site_libs/bootstrap-3.3.5/shim/html5shiv.min.js"></script>
+<script src="site_libs/bootstrap-3.3.5/shim/respond.min.js"></script>
+<style>h1 {font-size: 34px;}
+       h1.title {font-size: 38px;}
+       h2 {font-size: 30px;}
+       h3 {font-size: 24px;}
+       h4 {font-size: 18px;}
+       h5 {font-size: 16px;}
+       h6 {font-size: 12px;}
+       code {color: inherit; background-color: rgba(0, 0, 0, 0.04);}
+       pre:not([class]) { background-color: white }</style>
+<script src="site_libs/jqueryui-1.11.4/jquery-ui.min.js"></script>
+<link href="site_libs/tocify-1.9.1/jquery.tocify.css" rel="stylesheet" />
+<script src="site_libs/tocify-1.9.1/jquery.tocify.js"></script>
+<script src="site_libs/navigation-1.1/tabsets.js"></script>
+<script src="site_libs/navigation-1.1/codefolding.js"></script>
+<link href="site_libs/highlightjs-9.12.0/textmate.css" rel="stylesheet" />
+<script src="site_libs/highlightjs-9.12.0/highlight.js"></script>
+
+<link rel="icon" href="https://github.com/workflowr/workflowr-assets/raw/main/img/reproducible.png">
+<!-- Add a small amount of space between sections. -->
+<style type="text/css">
+div.section {
+  padding-top: 12px;
+}
+</style>
+
+
+
+<style type="text/css">
+  code{white-space: pre-wrap;}
+  span.smallcaps{font-variant: small-caps;}
+  span.underline{text-decoration: underline;}
+  div.column{display: inline-block; vertical-align: top; width: 50%;}
+  div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+  ul.task-list{list-style: none;}
+    </style>
+
+<style type="text/css">code{white-space: pre;}</style>
+<script type="text/javascript">
+if (window.hljs) {
+  hljs.configure({languages: []});
+  hljs.initHighlightingOnLoad();
+  if (document.readyState && document.readyState === "complete") {
+    window.setTimeout(function() { hljs.initHighlighting(); }, 0);
+  }
+}
+</script>
+
+
+
+
+
+
+
+
+
+<style type = "text/css">
+.main-container {
+  max-width: 940px;
+  margin-left: auto;
+  margin-right: auto;
+}
+img {
+  max-width:100%;
+}
+.tabbed-pane {
+  padding-top: 12px;
+}
+.html-widget {
+  margin-bottom: 20px;
+}
+button.code-folding-btn:focus {
+  outline: none;
+}
+summary {
+  display: list-item;
+}
+details > summary > p:only-child {
+  display: inline;
+}
+pre code {
+  padding: 0;
+}
+</style>
+
+
+<style type="text/css">
+.dropdown-submenu {
+  position: relative;
+}
+.dropdown-submenu>.dropdown-menu {
+  top: 0;
+  left: 100%;
+  margin-top: -6px;
+  margin-left: -1px;
+  border-radius: 0 6px 6px 6px;
+}
+.dropdown-submenu:hover>.dropdown-menu {
+  display: block;
+}
+.dropdown-submenu>a:after {
+  display: block;
+  content: " ";
+  float: right;
+  width: 0;
+  height: 0;
+  border-color: transparent;
+  border-style: solid;
+  border-width: 5px 0 5px 5px;
+  border-left-color: #cccccc;
+  margin-top: 5px;
+  margin-right: -10px;
+}
+.dropdown-submenu:hover>a:after {
+  border-left-color: #adb5bd;
+}
+.dropdown-submenu.pull-left {
+  float: none;
+}
+.dropdown-submenu.pull-left>.dropdown-menu {
+  left: -100%;
+  margin-left: 10px;
+  border-radius: 6px 0 6px 6px;
+}
+</style>
+
+<script type="text/javascript">
+// manage active state of menu based on current page
+$(document).ready(function () {
+  // active menu anchor
+  href = window.location.pathname
+  href = href.substr(href.lastIndexOf('/') + 1)
+  if (href === "")
+    href = "index.html";
+  var menuAnchor = $('a[href="' + href + '"]');
+
+  // mark it active
+  menuAnchor.tab('show');
+
+  // if it's got a parent navbar menu mark it active as well
+  menuAnchor.closest('li.dropdown').addClass('active');
+
+  // Navbar adjustments
+  var navHeight = $(".navbar").first().height() + 15;
+  var style = document.createElement('style');
+  var pt = "padding-top: " + navHeight + "px; ";
+  var mt = "margin-top: -" + navHeight + "px; ";
+  var css = "";
+  // offset scroll position for anchor links (for fixed navbar)
+  for (var i = 1; i <= 6; i++) {
+    css += ".section h" + i + "{ " + pt + mt + "}\n";
+  }
+  style.innerHTML = "body {" + pt + "padding-bottom: 40px; }\n" + css;
+  document.head.appendChild(style);
+});
+</script>
+
+<!-- tabsets -->
+
+<style type="text/css">
+.tabset-dropdown > .nav-tabs {
+  display: inline-table;
+  max-height: 500px;
+  min-height: 44px;
+  overflow-y: auto;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.tabset-dropdown > .nav-tabs > li.active:before {
+  content: "";
+  font-family: 'Glyphicons Halflings';
+  display: inline-block;
+  padding: 10px;
+  border-right: 1px solid #ddd;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li.active:before {
+  content: "&#xe258;";
+  border: none;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open:before {
+  content: "";
+  font-family: 'Glyphicons Halflings';
+  display: inline-block;
+  padding: 10px;
+  border-right: 1px solid #ddd;
+}
+
+.tabset-dropdown > .nav-tabs > li.active {
+  display: block;
+}
+
+.tabset-dropdown > .nav-tabs > li > a,
+.tabset-dropdown > .nav-tabs > li > a:focus,
+.tabset-dropdown > .nav-tabs > li > a:hover {
+  border: none;
+  display: inline-block;
+  border-radius: 4px;
+  background-color: transparent;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li {
+  display: block;
+  float: none;
+}
+
+.tabset-dropdown > .nav-tabs > li {
+  display: none;
+}
+</style>
+
+<!-- code folding -->
+<style type="text/css">
+.code-folding-btn { margin-bottom: 4px; }
+</style>
+
+
+
+<style type="text/css">
+
+#TOC {
+  margin: 25px 0px 20px 0px;
+}
+@media (max-width: 768px) {
+#TOC {
+  position: relative;
+  width: 100%;
+}
+}
+
+@media print {
+.toc-content {
+  /* see https://github.com/w3c/csswg-drafts/issues/4434 */
+  float: right;
+}
+}
+
+.toc-content {
+  padding-left: 30px;
+  padding-right: 40px;
+}
+
+div.main-container {
+  max-width: 1200px;
+}
+
+div.tocify {
+  width: 20%;
+  max-width: 260px;
+  max-height: 85%;
+}
+
+@media (min-width: 768px) and (max-width: 991px) {
+  div.tocify {
+    width: 25%;
+  }
+}
+
+@media (max-width: 767px) {
+  div.tocify {
+    width: 100%;
+    max-width: none;
+  }
+}
+
+.tocify ul, .tocify li {
+  line-height: 20px;
+}
+
+.tocify-subheader .tocify-item {
+  font-size: 0.90em;
+}
+
+.tocify .list-group-item {
+  border-radius: 0px;
+}
+
+
+</style>
+
+
+
+</head>
+
+<body>
+
+
+<div class="container-fluid main-container">
+
+
+<!-- setup 3col/9col grid for toc_float and main content  -->
+<div class="row">
+<div class="col-xs-12 col-sm-4 col-md-3">
+<div id="TOC" class="tocify">
+</div>
+</div>
+
+<div class="toc-content col-xs-12 col-sm-8 col-md-9">
+
+
+
+
+<div class="navbar navbar-default  navbar-fixed-top" role="navigation">
+  <div class="container">
+    <div class="navbar-header">
+      <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-bs-toggle="collapse" data-target="#navbar" data-bs-target="#navbar">
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+      </button>
+      <a class="navbar-brand" href="index.html">Induced_autophagy</a>
+    </div>
+    <div id="navbar" class="navbar-collapse collapse">
+      <ul class="nav navbar-nav">
+        <li>
+  <a href="index.html">Home</a>
+</li>
+<li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    Quality Check
+     
+    <span class="caret"></span>
+  </a>
+  <ul class="dropdown-menu" role="menu">
+    <li>
+      <a href="HeLa_QC.html">HeLa</a>
+    </li>
+    <li>
+      <a href="SH-SY5Y_QC.html">SH-SY5Y</a>
+    </li>
+    <li>
+      <a href="HEK293_QC.html">HEK293</a>
+    </li>
+  </ul>
+</li>
+<li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    DE
+     
+    <span class="caret"></span>
+  </a>
+  <ul class="dropdown-menu" role="menu">
+    <li>
+      <a href="DE_analysis.html">Analysis</a>
+    </li>
+    <li>
+      <a href="DE_summary.html">Summary</a>
+    </li>
+  </ul>
+</li>
+<li>
+  <a href="TFT_enrichment.html">TFT ORA</a>
+</li>
+<li>
+  <a href="Pathway_analysis_KEGG.html">Pathway Analysis (KEGG)</a>
+</li>
+<li>
+  <a href="TF2KEGG_network.html">TF-KEGG regulation inference</a>
+</li>
+      </ul>
+      <ul class="nav navbar-nav navbar-right">
+        
+      </ul>
+    </div><!--/.nav-collapse -->
+  </div><!--/.container -->
+</div><!--/.navbar -->
+
+<div id="header">
+
+<div class="btn-group pull-right float-right">
+<button type="button" class="btn btn-default btn-xs btn-secondary btn-sm dropdown-toggle" data-toggle="dropdown" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false"><span>Code</span> <span class="caret"></span></button>
+<ul class="dropdown-menu dropdown-menu-right" style="min-width: 50px;">
+<li><a id="rmd-show-all-code" href="#">Show All Code</a></li>
+<li><a id="rmd-hide-all-code" href="#">Hide All Code</a></li>
+</ul>
+</div>
+
+
+
+<h1 class="title toc-ignore">Pathway_analysis_KEGG</h1>
+<h4 class="date">2022-03-20</h4>
+
+</div>
+
+
+<p>
+<button type="button" class="btn btn-default btn-workflowr btn-workflowr-report" data-toggle="collapse" data-target="#workflowr-report">
+<span class="glyphicon glyphicon-list" aria-hidden="true"></span>
+workflowr <span class="glyphicon glyphicon-exclamation-sign text-danger"
+aria-hidden="true"></span>
+</button>
+</p>
+<div id="workflowr-report" class="collapse">
+<ul class="nav nav-tabs">
+<li class="active">
+<a data-toggle="tab" href="#summary">Summary</a>
+</li>
+<li>
+<a data-toggle="tab" href="#checks"> Checks <span
+class="glyphicon glyphicon-exclamation-sign text-danger"
+aria-hidden="true"></span> </a>
+</li>
+<li>
+<a data-toggle="tab" href="#versions">Past versions</a>
+</li>
+</ul>
+<div class="tab-content">
+<div id="summary" class="tab-pane fade in active">
+<p>
+<strong>Last updated:</strong> 2022-03-21
+</p>
+<p>
+<strong>Checks:</strong> <span
+class="glyphicon glyphicon-ok text-success" aria-hidden="true"></span> 5
+<span class="glyphicon glyphicon-exclamation-sign text-danger"
+aria-hidden="true"></span> 2
+</p>
+<p>
+<strong>Knit directory:</strong> <code>Induced_autophagy/</code> <span
+class="glyphicon glyphicon-question-sign" aria-hidden="true"
+title="This is the local directory in which the code in this file was executed.">
+</span>
+</p>
+<p>
+This reproducible <a href="https://rmarkdown.rstudio.com">R Markdown</a>
+analysis was created with <a
+  href="https://github.com/workflowr/workflowr">workflowr</a> (version
+1.7.0). The <em>Checks</em> tab describes the reproducibility checks
+that were applied when the results were created. The <em>Past
+versions</em> tab lists the development history.
+</p>
+<hr>
+</div>
+<div id="checks" class="tab-pane fade">
+<div id="workflowr-checks" class="panel-group">
+<div class="panel panel-default">
+<div class="panel-heading">
+<p class="panel-title">
+<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongRMarkdownfilestronguncommittedchanges">
+<span class="glyphicon glyphicon-exclamation-sign text-danger"
+aria-hidden="true"></span> <strong>R Markdown file:</strong> uncommitted
+changes </a>
+</p>
+</div>
+<div id="strongRMarkdownfilestronguncommittedchanges"
+class="panel-collapse collapse">
+<div class="panel-body">
+<p>The R Markdown is untracked by Git. To know which version of the R
+Markdown file created these results, you’ll want to first commit it to
+the Git repo. If you’re still working on the analysis, you can ignore
+this warning. When you’re finished, you can run
+<code>wflow_publish</code> to commit the R Markdown file and build the
+HTML.</p>
+</div>
+</div>
+</div>
+<div class="panel panel-default">
+<div class="panel-heading">
+<p class="panel-title">
+<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongEnvironmentstrongempty">
+<span class="glyphicon glyphicon-ok text-success"
+aria-hidden="true"></span> <strong>Environment:</strong> empty </a>
+</p>
+</div>
+<div id="strongEnvironmentstrongempty" class="panel-collapse collapse">
+<div class="panel-body">
+<p>Great job! The global environment was empty. Objects defined in the
+global environment can affect the analysis in your R Markdown file in
+unknown ways. For reproduciblity it’s best to always run the code in an
+empty environment.</p>
+</div>
+</div>
+</div>
+<div class="panel panel-default">
+<div class="panel-heading">
+<p class="panel-title">
+<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongSeedstrongcodesetseed20220317code">
+<span class="glyphicon glyphicon-ok text-success"
+aria-hidden="true"></span> <strong>Seed:</strong>
+<code>set.seed(20220317)</code> </a>
+</p>
+</div>
+<div id="strongSeedstrongcodesetseed20220317code"
+class="panel-collapse collapse">
+<div class="panel-body">
+<p>The command <code>set.seed(20220317)</code> was run prior to running
+the code in the R Markdown file. Setting a seed ensures that any results
+that rely on randomness, e.g. subsampling or permutations, are
+reproducible.</p>
+</div>
+</div>
+</div>
+<div class="panel panel-default">
+<div class="panel-heading">
+<p class="panel-title">
+<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongSessioninformationstrongrecorded">
+<span class="glyphicon glyphicon-ok text-success"
+aria-hidden="true"></span> <strong>Session information:</strong>
+recorded </a>
+</p>
+</div>
+<div id="strongSessioninformationstrongrecorded"
+class="panel-collapse collapse">
+<div class="panel-body">
+<p>Great job! Recording the operating system, R version, and package
+versions is critical for reproducibility.</p>
+</div>
+</div>
+</div>
+<div class="panel panel-default">
+<div class="panel-heading">
+<p class="panel-title">
+<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongCachestrongnone">
+<span class="glyphicon glyphicon-ok text-success"
+aria-hidden="true"></span> <strong>Cache:</strong> none </a>
+</p>
+</div>
+<div id="strongCachestrongnone" class="panel-collapse collapse">
+<div class="panel-body">
+<p>Nice! There were no cached chunks for this analysis, so you can be
+confident that you successfully produced the results during this
+run.</p>
+</div>
+</div>
+</div>
+<div class="panel panel-default">
+<div class="panel-heading">
+<p class="panel-title">
+<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongFilepathsstrongabsolute">
+<span class="glyphicon glyphicon-exclamation-sign text-danger"
+aria-hidden="true"></span> <strong>File paths:</strong> absolute </a>
+</p>
+</div>
+<div id="strongFilepathsstrongabsolute" class="panel-collapse collapse">
+<div class="panel-body">
+<p>
+Using absolute paths to the files within your workflowr project makes it
+difficult for you and others to run your code on a different machine.
+Change the absolute path(s) below to the suggested relative path(s) to
+make your code more reproducible.
+</p>
+<table class="table table-condensed table-hover">
+<thead>
+<tr>
+<th style="text-align:left;">
+absolute
+</th>
+<th style="text-align:left;">
+relative
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left;">
+/Users/wenjunliu/Induced_autophagy/output/BminsI.Rda
+</td>
+<td style="text-align:left;">
+output/BminsI.Rda
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+<div class="panel panel-default">
+<div class="panel-heading">
+<p class="panel-title">
+<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongRepositoryversionstrongahrefhttpsgithubcomWenjunLiuInducedautophagytree3d30821bbcd1820dd54f77d9953aa474df721c52targetblank3d30821a">
+<span class="glyphicon glyphicon-ok text-success"
+aria-hidden="true"></span> <strong>Repository version:</strong>
+<a href="https://github.com/Wenjun-Liu/Induced_autophagy/tree/3d30821bbcd1820dd54f77d9953aa474df721c52" target="_blank">3d30821</a>
+</a>
+</p>
+</div>
+<div
+id="strongRepositoryversionstrongahrefhttpsgithubcomWenjunLiuInducedautophagytree3d30821bbcd1820dd54f77d9953aa474df721c52targetblank3d30821a"
+class="panel-collapse collapse">
+<div class="panel-body">
+<p>
+Great! You are using Git for version control. Tracking code development
+and connecting the code version to the results is critical for
+reproducibility.
+</p>
+<p>
+The results in this page were generated with repository version
+<a href="https://github.com/Wenjun-Liu/Induced_autophagy/tree/3d30821bbcd1820dd54f77d9953aa474df721c52" target="_blank">3d30821</a>.
+See the <em>Past versions</em> tab to see a history of the changes made
+to the R Markdown and HTML files.
+</p>
+<p>
+Note that you need to be careful to ensure that all relevant files for
+the analysis have been committed to Git prior to generating the results
+(you can use <code>wflow_publish</code> or
+<code>wflow_git_commit</code>). workflowr only checks the R Markdown
+file, but you know if there are other scripts or data files that it
+depends on. Below is the status of the Git repository when the results
+were generated:
+</p>
+<pre><code>
+Ignored files:
+    Ignored:    -TF2KEGG_network_files/
+    Ignored:    .Rhistory
+    Ignored:    .Rproj.user/
+    Ignored:    Induced_autophagy.Rproj
+    Ignored:    Pathway_analysis-KEGG-_files/
+
+Untracked files:
+    Untracked:  -TF2KEGG_network.Rmd
+    Untracked:  analysis/DE_summary.Rmd
+    Untracked:  analysis/Pathway_analysis_KEGG.Rmd
+    Untracked:  analysis/TF2KEGG_network.Rmd
+    Untracked:  analysis/TFT_enrichment.Rmd
+    Untracked:  data/2_alignedData/featureCounts/rawCounts.rds
+    Untracked:  output/BminsI.Rda
+    Untracked:  output/DE_genes.rds
+    Untracked:  output/TF_KEGG/
+    Untracked:  output/dgeByCon.rds
+    Untracked:  output/goseqTF_DE.Rda
+    Untracked:  output/goseq_kegg.rds
+    Untracked:  output/kgToGene.rds
+    Untracked:  output/spia_netPer.Rda
+    Untracked:  output/spia_net_permut.Rda
+    Untracked:  output/topTables/
+    Untracked:  site_libs/
+
+Unstaged changes:
+    Modified:   README.md
+    Deleted:    analysis/12_metaDEcopy.Rmd
+    Modified:   analysis/DE_analysis.Rmd
+    Modified:   analysis/_site.yml
+    Deleted:    analysis/about.Rmd
+    Modified:   analysis/index.Rmd
+    Deleted:    data/dgeList.rda
+
+</code></pre>
+<p>
+Note that any generated files, e.g. HTML, png, CSS, etc., are not
+included in this status report because it is ok for generated content to
+have uncommitted changes.
+</p>
+</div>
+</div>
+</div>
+</div>
+<hr>
+</div>
+<div id="versions" class="tab-pane fade">
+<p>
+There are no past versions. Publish this analysis with
+<code>wflow_publish()</code> to start tracking its development.
+</p>
+<hr>
+</div>
+</div>
+</div>
+<p>#Set libaries</p>
+<pre class="r"><code>library(ngsReports)
+library(tidyverse)
+library(magrittr)
+library(edgeR)
+library(AnnotationHub)
+library(ensembldb)
+library(scales)
+library(pander)
+library(cqn)
+library(ggrepel)
+library(pheatmap)
+library(RColorBrewer)
+library(corrplot)
+library(UpSetR)
+library(cowplot)
+library(msigdbr)
+library(GO.db)
+library(goseq)
+library(kableExtra)
+library(plotly)
+library(reshape2)
+library(DT)
+library(ComplexHeatmap)
+library(viridis)
+library(igraph)
+library(ggraph)
+library(textworks)</code></pre>
+<pre class="r"><code>ah &lt;- AnnotationHub() %&gt;%
+    subset(species == &quot;Homo sapiens&quot;) %&gt;%
+    subset(rdataclass == &quot;EnsDb&quot;)
+ensDB &lt;- ah[[&quot;AH75011&quot;]]
+grTrans &lt;- transcripts(ensDB)
+trLengths &lt;- exonsBy(ensDB, &quot;tx&quot;) %&gt;%
+    width() %&gt;%
+    vapply(sum, integer(1))
+mcols(grTrans)$length &lt;- trLengths[names(grTrans)]
+gcGene &lt;- grTrans %&gt;%
+  mcols() %&gt;%
+  as.data.frame() %&gt;%
+  dplyr::select(gene_id, tx_id, gc_content, length) %&gt;%
+  as_tibble() %&gt;%
+  group_by(gene_id) %&gt;%
+  summarise(
+    gc_content = sum(gc_content*length) / sum(length),
+    length = ceiling(median(length))
+  )
+grGenes &lt;- genes(ensDB)
+mcols(grGenes) %&lt;&gt;%
+  as.data.frame() %&gt;%
+  left_join(gcGene) %&gt;%
+  as.data.frame() %&gt;%
+  DataFrame()</code></pre>
+<p>Raw read counts were read in and an overall <code>DGElist</code>
+object was created.</p>
+<pre class="r"><code>filename &lt;- here::here(&quot;data&quot;, &quot;filename.txt&quot;) %&gt;%
+  read.table(header = TRUE, sep = &quot;\t&quot;,stringsAsFactors = FALSE) %&gt;% 
+  as_tibble()%&gt;%
+  mutate_at(vars(one_of(c(&quot;CELL&quot;, &quot;TREAT&quot;,&quot;CONTR&quot;, &quot;TIME&quot;))), as.factor) %&gt;%
+  mutate(TREATED = ifelse(CONTR == 0,1,0))
+dgeList &lt;- here::here(&quot;data&quot;, &quot;2_alignedData&quot;, &quot;featureCounts&quot;, &quot;genes.out&quot;) %&gt;%
+  read_delim(delim = &quot;\t&quot;) %&gt;%
+  set_names(basename(names(.))) %&gt;%
+  as.data.frame() %&gt;%
+  column_to_rownames(&quot;Geneid&quot;) %&gt;%
+  as.matrix() %&gt;% 
+  set_colnames(str_remove(colnames(.), &quot;Aligned.sortedByCoord.out.bam&quot;)) %&gt;%
+  DGEList(
+    samples = tibble(sample = colnames(.)) %&gt;%
+      left_join(dplyr::filter(filename, read == &quot;R1&quot;)),
+    genes = grGenes[rownames(.)] %&gt;%
+      as.data.frame() %&gt;%
+      dplyr::select(
+        chromosome = seqnames, start, end, 
+        gene_id, gene_name, gene_biotype, description, 
+        entrezid, gc_content, length
+      )
+  ) %&gt;%
+  .[!grepl(&quot;rRNA&quot;, .$genes$gene_biotype),] %&gt;%
+  calcNormFactors()
+entrezGenes &lt;- dgeList$genes %&gt;%
+  unnest(entrezid) %&gt;%
+  dplyr::rename(entrez_gene = entrezid)</code></pre>
+<div id="retrieve-kegg-pathways" class="section level1">
+<h1>Retrieve KEGG pathways</h1>
+<p>Significant regulation of KEGG pathways were then determined by
+combining evidence derived from modified SPIA and goseq. SPIA is a
+pathway perturbation testing strategy that takes pathway topologies in
+consideration, while <code>goseq</code> is an enrichment testing
+strategy.</p>
+<p>312 KEGG pathways and their encoded topologise were extracted using
+<code>graphite</code></p>
+<pre class="r"><code># kegg &lt;- pathways(&quot;hsapiens&quot;, &quot;kegg&quot;)
+# kegg &lt;- convertIdentifiers(kegg, &quot;ENTREZID&quot;)
+# prepareSPIA(kegg, &quot;keggEx&quot;)
+# kgToGene &lt;- sapply(seq_len(length(kegg)), function(x){
+#   kegg[[x]] %&gt;%
+#     nodes() %&gt;%
+#     as.data.frame() %&gt;%
+#   set_colnames(&quot;entrez_gene&quot;) %&gt;%
+#   mutate(entrez_gene = gsub(&quot;ENTREZID:&quot;, &quot;&quot;, entrez_gene),
+#          entrez_gene = as.integer(entrez_gene),
+#     gs_name = pathwayTitle(kegg[[x]])) %&gt;%
+#   left_join(entrezGenes %&gt;%
+#               dplyr::select(gene_name, entrez_gene)) %&gt;%
+#     dplyr::select(-&quot;entrez_gene&quot;)
+# }, simplify = FALSE)  %&gt;%
+#   bind_rows() %&gt;%
+#   drop_na()
+# save(kgToGene, file = here::here(&quot;output/kgToGene.rds&quot;))
+load(here::here(&quot;output/kgToGene.rds&quot;))
+all &lt;- entrezGenes %&gt;%
+  dplyr::filter(!is.na(entrez_gene)) %&gt;%
+  mutate(entrez_gene = paste(&quot;ENTREZID:&quot;, entrez_gene, sep = &quot;&quot;)) %&gt;%
+  extract2(&quot;entrez_gene&quot;)</code></pre>
+<pre class="r"><code>kg &lt;- kgToGene %&gt;%
+  left_join(grGenes %&gt;%
+              as.data.frame() %&gt;%
+              distinct(gene_id, .keep_all = TRUE) %&gt;%
+              dplyr::select(gene_id, gene_name))
+kgByGene &lt;- kg %&gt;%
+  split(f = .$gene_id) %&gt;%
+  lapply(pull, gs_name)</code></pre>
+</div>
+<div id="over-representation-using-goseq" class="section level1">
+<h1>Over-representation using <code>goseq</code></h1>
+<p>KEGG pathways with FDR &lt; 0.05 in <code>goseq</code> output were
+defined to be significantly over-represented.</p>
+<pre class="r"><code># lenPwf_DE &lt;- sapply(names(DE_genes), function(x){
+#   grTrans %&gt;%
+#     as.data.frame() %&gt;%
+#     distinct(gene_id, .keep_all = TRUE) %&gt;%
+#     dplyr::select(gene_id, length) %&gt;%
+#     mutate(Status = case_when(gene_id %in% DE_genes[[x]]$gene_id  ~ 1, !gene_id %in% DE_genes[[x]]$gene_id   ~ 0)) %&gt;%
+#     with(
+#       nullp(
+#         DEgenes = structure(
+#           Status, names = gene_id
+#         ),
+#         genome = &quot;GRCh38.p16&quot;,
+#         id = &quot;ensGene&quot;,
+#         bias.data =length,
+#         plot.fit = FALSE
+#       )
+#     )
+# }, simplify = FALSE)
+# goseq_kegg &lt;- sapply(names(lenPwf_DE), function(x){
+#   goseq(lenPwf_DE[[x]],
+#         gene2cat = kg) %&gt;%
+#     as_tibble %&gt;%
+#     dplyr::filter(numDEInCat &gt; 0) %&gt;%
+#     mutate(
+#       adjP = p.adjust(over_represented_pvalue, method = &quot;bonf&quot;),
+#       FDR = as.numeric(p.adjust(over_represented_pvalue, method = &quot;fdr&quot;))
+#     ) %&gt;%
+#     dplyr::select(-contains(&quot;under&quot;)) %&gt;%
+#     dplyr::rename(
+#       gs_name = category,
+#       PValue = over_represented_pvalue,
+#       nDE = numDEInCat,
+#       nExpressed = numInCat
+#     ) %&gt;%
+#     left_join(kg) %&gt;%
+#     dplyr::select(
+#       gs_name, nExpressed, nDE,
+#       contains(&quot;P&quot;, ignore.case = FALSE),
+#       FDR,
+#       gene_name, gene_id
+#     ) %&gt;%
+#     dplyr::filter(
+#       gene_id %in% DE_genes[[x]]$gene_id
+#     ) %&gt;%
+#     chop(c(&quot;gene_name&quot;, &quot;gene_id&quot;)) %&gt;%
+#     mutate(
+#       gene_name = vapply(.$gene_name, function(x){
+#         paste(x,collapse = &quot;;&quot;)
+#       }, character(1)),
+#       gene_id = vapply(.$gene_id, function(x){
+#         paste(x,collapse = &quot;;&quot;)
+#       }, character(1))
+#     ) %&gt;%
+#     mutate_at(
+#       vars(one_of(c(&quot;PValue&quot;, &quot;adjP&quot;, &quot;FDR&quot;))),
+#       formatP
+#     )
+# }, simplify = FALSE)
+# names(goseq_kegg) &lt;- c(&quot;HEK293_AZD8055&quot;, &quot;HEK293_Starvation&quot;,&quot;SH-SY5Y_AZD8055&quot;, &quot;SH-SY5Y_Starvation&quot;, &quot;HeLa_AZD8055&quot;,
+#                   &quot;HeLa_Starvation&quot;)
+# saveRDS(goseq_kegg, file = here::here(&quot;output/goseq_kegg.rds&quot;))
+goseq_kegg &lt;- readRDS(here::here(&quot;output/goseq_kegg.rds&quot;))
+goseq_kegg_sig &lt;- goseq_kegg %&gt;%
+lapply(dplyr::filter, FDR &lt; 0.05)</code></pre>
+<div id="summary" class="section level3">
+<h3>Summary</h3>
+<p>Overlap between enriched KEGG pathways defined under each condition
+was visualized through the upset plot.</p>
+<pre class="r"><code>goseq_kegg %&gt;%
+  lapply(dplyr::filter, FDR &lt; 0.05) %&gt;%
+  lapply(pull, gs_name) %&gt;%
+  fromList() %&gt;%
+  upset(sets = colnames(.), 
+        nintersects = NA, 
+        keep.order = TRUE, 
+        queries = list(
+          list(query = intersects, 
+             params = list(&quot;HEK293_AZD8055&quot;, &quot;HeLa_AZD8055&quot;, 
+                           &quot;HeLa_Starvation&quot;, &quot;SH-SY5Y_AZD8055&quot;),
+             color = &quot;red&quot;,
+             active = T),
+          list(query = intersects, 
+             params = list(&quot;HeLa_AZD8055&quot;, 
+                           &quot;HeLa_Starvation&quot;, &quot;SH-SY5Y_AZD8055&quot;,&quot;SH-SY5Y_Starvation&quot;),
+             color = &quot;red&quot;,
+             active = T),
+        list(query = intersects, 
+             params = list(&quot;HEK293_AZD8055&quot;,&quot;HEK293_Starvation&quot;, &quot;HeLa_AZD8055&quot;, 
+                           &quot;HeLa_Starvation&quot;),
+             color = &quot;red&quot;,
+             active = T),
+        list(query = intersects,
+             params = list( &quot;SH-SY5Y_Starvation&quot;, &quot;SH-SY5Y_AZD8055&quot;),
+             color = &quot;blue&quot;,
+             active = T)
+        )
+  )</code></pre>
+<div class="figure" style="text-align: center">
+<img src="figure/Pathway_analysis_KEGG.Rmd/goseq_kegg_sig-1.png" alt="*Overlap between KEGG pathways defined to be over-represented under each condition.There wasn't any KEGG pathways that were over-represented in all conditions but there were 4 that were OR in 4 conditions (colored red) and 1 pathway that was unique to SY5Y cell line (colored blue).*" width="672" />
+<p class="caption">
+<em>Overlap between KEGG pathways defined to be over-represented under
+each condition.There wasn’t any KEGG pathways that were over-represented
+in all conditions but there were 4 that were OR in 4 conditions (colored
+red) and 1 pathway that was unique to SY5Y cell line (colored
+blue).</em>
+</p>
+</div>
+<pre class="r"><code>orKEGG_4 &lt;- goseq_kegg %&gt;%
+  lapply(dplyr::filter, FDR &lt; 0.05) %&gt;%
+  bind_rows() %&gt;%
+  group_by(gs_name) %&gt;%
+  filter(n() == 4) %&gt;%
+  pull(gs_name) %&gt;%
+  unique()
+orKEGG_1 &lt;- goseq_kegg[str_subset(names(goseq_kegg), &quot;SH&quot;)] %&gt;%
+  lapply(dplyr::filter, FDR &lt; 0.05) %&gt;%
+  lapply(pull, gs_name) %&gt;%
+  Reduce(intersect,.) %&gt;%
+  setdiff(., goseq_kegg[str_subset(names(goseq_kegg), &quot;SH&quot;, negate = TRUE)] %&gt;%
+            lapply(dplyr::filter, FDR &lt; 0.05) %&gt;%
+            lapply(pull, gs_name) %&gt;%
+            unname() %&gt;%
+            unlist())
+temp1 &lt;- sapply(names(goseq_kegg), function(x){
+  goseq_kegg[[x]] %&gt;%
+    dplyr::filter(gs_name %in% orKEGG_4, 
+                  FDR &lt; 0.05) %&gt;%
+    mutate(Condition = x, 
+           PValue = -log10(PValue)) %&gt;%
+    dplyr::select(gs_name, PValue , Condition)
+}, simplify = FALSE)
+hp1 &lt;- temp1 %&gt;%
+  bind_rows() %&gt;%
+  # rbind(data.frame(gs_name = orKEGG_4, PValue = NA, Condition = &quot;HeLa_Starvation&quot;)) %&gt;%
+  ggplot(aes(factor(Condition, levels = names(goseq_kegg)), 
+             gs_name, fill = PValue)) +
+  geom_tile(aes(fill = PValue), fontsize =3) +
+  scale_fill_viridis(option = &quot;magma&quot;, 
+                     name = &quot;-log10(P value)&quot;) +
+  theme(
+    axis.title=element_blank(),
+    panel.grid = element_blank(),
+    # axis.ticks = element_blank(),
+    legend.title = element_text(size= 8),
+    legend.key.size = unit(3, &#39;mm&#39;),
+    axis.text.x = element_text(angle = 45,hjust=1)
+    #   axis.text.y = element_text(colour = col)
+  ) +
+  ggtitle(&quot;Over-represented in at least 4 conditions&quot;)
+temp2 &lt;- sapply(str_subset(names(goseq_kegg), &quot;SH&quot;), function(x){
+  goseq_kegg[[x]] %&gt;%
+    dplyr::filter(gs_name %in% orKEGG_1, 
+                  FDR &lt; 0.05) %&gt;%
+    mutate(Condition = x, 
+           PValue = -log10(PValue)) %&gt;%
+    dplyr::select(gs_name, PValue, Condition)
+}, simplify = FALSE)
+hp2 &lt;- temp2 %&gt;%
+  bind_rows() %&gt;%
+  replace(is.na(.),0) %&gt;%
+  ggplot(aes(Condition, 
+             gs_name, fill = PValue)) +
+  geom_tile(aes(fill = PValue), fontsize =3) +
+  scale_fill_viridis(option = &quot;magma&quot;, 
+                     name = &quot;-log10(P value)&quot;) +
+  theme(
+    axis.title=element_blank(),
+    panel.grid = element_blank(),
+    # axis.ticks = element_blank(),
+    legend.title = element_text(size= 8),
+    legend.key.size = unit(3, &#39;mm&#39;),
+    axis.text.x = element_text(angle = 45,hjust=1)
+    # axis.text.x = element_text(angle = 45, hjust=1)
+    #   axis.text.y = element_text(colour = col)
+  ) +
+  ggtitle(&quot;Over-represented only in SY5Y&quot;)
+# pdf(file = &quot;/Users/wenjunliu/RNA_seq_autophagicflux/Manuscript/Figure/newest/summary_KEGG_OR(2hp).pdf&quot;,
+#     width = 10,
+#     height = 5)
+plot_grid(hp1, hp2, 
+          ncol = 2, 
+          rel_heights = c(3,1), 
+          scale = c(1, 0.5),
+          labels = c(&quot;a&quot;, &quot;b&quot;))</code></pre>
+<div class="figure" style="text-align: center">
+<img src="figure/Pathway_analysis_KEGG.Rmd/orKEGG_2hp-1.png" alt="-log10(Pvalue) of KEGG pathways enriched (a) in 4 conditions (b) only in SY5Y cell line*" width="1152" />
+<p class="caption">
+-log10(Pvalue) of KEGG pathways enriched (a) in 4 conditions (b) only in
+SY5Y cell line*
+</p>
+</div>
+<pre class="r"><code># dev.off()</code></pre>
+<p>ALl KEGG pathways that were over-represented in at least one
+condition were extracted and their FDR were visualised.</p>
+<pre class="r"><code>allKEGGor &lt;- goseq_kegg %&gt;%
+  lapply(dplyr::filter, FDR &lt; 0.05) %&gt;%
+  bind_rows() %&gt;%
+  pull(gs_name) %&gt;%
+  unique()
+allKEGGor &lt;- setdiff(allKEGGor, &quot;Metabolic pathways&quot;)
+temp &lt;- sapply(names(goseq_kegg), function(x){
+  goseq_kegg[[x]] %&gt;%
+    dplyr::filter(gs_name %in% allKEGGor) %&gt;%
+    replace(is.na(.),0) %&gt;%
+     mutate(Condition = x, 
+           logFDR = -log10(FDR), 
+           Sig = ifelse(FDR &lt; 0.05, TRUE, FALSE),
+           roundedFDR = paste(round(FDR,3)*100, &quot;%&quot;, sep = &quot;&quot;),
+           roundedFDR = ifelse(roundedFDR == &quot;0%&quot;, &quot;&lt;0.1%&quot;, roundedFDR), 
+           roundedFDR = ifelse(FDR &lt; 0.05, paste(roundedFDR, &quot;*&quot;, sep = &quot;&quot;), roundedFDR)) %&gt;%
+    dplyr::select(gs_name,logFDR, Condition, roundedFDR, Sig)
+}, simplify = FALSE) %&gt;%
+  bind_rows()
+allKEGGor_hcl &lt;- temp %&gt;%
+  dplyr::select(gs_name, logFDR, Condition) %&gt;%
+  pivot_wider(names_from = Condition, values_from = logFDR) %&gt;%
+  replace(is.na(.),0) %&gt;%
+  column_to_rownames(&quot;gs_name&quot;) %&gt;%
+  dist() %&gt;%
+  hclust() 
+temp %&gt;%
+  ggplot(aes(factor(gs_name, levels = allKEGGor_hcl$labels[allKEGGor_hcl$order]), Condition)) +
+  geom_tile(aes(fill = logFDR)) +
+  geom_text(data = . %&gt;% dplyr::filter(!Sig), 
+            aes(label = roundedFDR), size = 4, color = &quot;azure4&quot;) +
+  geom_text(data = . %&gt;% dplyr::filter(Sig), 
+            aes(label = roundedFDR), size = 4, color = &quot;black&quot;) +
+  scale_fill_viridis(option = &quot;magma&quot;, 
+                     name = &quot;-log10(P value)&quot;) +
+  theme(
+    axis.title=element_blank(),
+    panel.grid = element_blank(),
+    # axis.ticks = element_blank(),
+    legend.title = element_text(size= 12),
+    legend.key.size = unit(3, &#39;mm&#39;),
+    axis.text.x = element_text(angle = 45, hjust=1, size = 12), 
+    axis.text.y = element_text(size= 12)
+    #   axis.text.y = element_text(colour = col)
+  ) +
+  panel_border(remove = TRUE) +
+  coord_fixed(ratio= 1.8)</code></pre>
+<p><img src="figure/Pathway_analysis_KEGG.Rmd/keggOR_hp-1.png" width="1536" style="display: block; margin: auto;" /></p>
+</div>
+</div>
+<div id="perturbation-testing" class="section level1">
+<h1>Perturbation testing</h1>
+<p>The observed peturbation scores of KEGG pathways under each condition
+were firstly derived using algorithm adapted from <a
+href="https://www.ncbi.nlm.nih.gov/pmc/articles/PMC2732297/"><code>SPIA</code></a>.</p>
+<pre class="r"><code># load(&quot;/Users/wenjunliu/Induced_autophagy/output/BminsI.Rda&quot;)
+# merge_DE_spia &lt;- sapply(names(DE_fc), function(x){
+#   DE_fc[[x]] %&gt;%
+#     left_join(entrezGenes) %&gt;%
+#     dplyr::select(aveFC, entrez_gene) %&gt;%
+#     unique() %&gt;%
+#     drop_na() %&gt;%
+#     mutate(entrez_gene = paste(&quot;ENTREZID:&quot;, entrez_gene, sep = &quot;&quot;))
+# }, simplify = FALSE)
+# merge_DE_spia &lt;- sapply(names(merge_DE_spia), function(x){
+#   merge_DE_spia[[x]] %&gt;%
+#     extract2(&quot;aveFC&quot;) %&gt;%
+#     set_names(merge_DE_spia[[x]]$entrez_gene)
+# }, simplify = FALSE)
+# spia_netPer &lt;- sapply(names(merge_DE_spia), function(x){
+#   spia_my(de = merge_DE_spia[[x]], BminsI = BminsI)
+# }, simplify = FALSE)
+# save(spia_netPer, file = here::here(&quot;output/spia_netPer.Rda&quot;))
+load(here::here(&quot;output/spia_netPer.Rda&quot;))</code></pre>
+<p>The original <code>SPIA</code> paper uses a gene-labels permutation
+based method to test significances of test perturbation scores, which
+makes an unrelistic assumption of gene-gene independence.</p>
+<p>To overcome this problem, we proposed a sample label permutation
+approach. In each round of permutation, sample labels are randomly
+shuffled and the same DE analysis workflow is undertaken, leading to
+permuted DEGs and their permuted logFCs. Those are then used as input
+for the pathway perturbation testing algorithm.</p>
+<p>1000 permutations are performed to obtain the null distribution of
+perturbation scores for each pathway.</p>
+<p>To get ready for permutation, DGELists were split by cells,
+undetectable genes were removed and cqn was applied to add offset terms
+just like how DE analyses were performed before.</p>
+<p>DGELists were then further split to 6 conditions (cell_treat), and
+only the baseline control and 15 and 30 hrs treated were kept.</p>
+<pre class="r"><code># metaByCell &lt;- sapply(c(&quot;HeLa.tfLC3&quot;, &quot;SH-SY5Y.tfLC3&quot;,&quot;HEK293.tfLC3&quot;), function(x){
+#   metadata %&gt;%
+#     dplyr::filter(CELL == x)
+# }, simplify = FALSE) %&gt;%
+#   lapply(mutate, group = paste(TREAT, TIME, sep = &quot;_&quot;))
+# sampleByCell &lt;- sapply(names(metaByCell), function(x){
+#   grepl(paste(unique(metaByCell[[x]]$sample), collapse=&quot;|&quot;),dgeList$samples$sample)
+# }, simplify = FALSE)
+# dgeList_byCell &lt;- sapply(names(metaByCell), function(x){
+#   dgeList[,sampleByCell[[x]]] %&gt;%
+#     .[rowSums(cpm(.) &gt;= minCPM) &gt;= minSamples,]
+# }, simplify = FALSE)
+# cqn_byCell &lt;- sapply(names(dgeList_byCell), function(x){
+#   cqn(
+#     counts = dgeList_byCell[[x]]$counts,
+#     x = dgeList_byCell[[x]]$genes$gc_content,
+#     lengths = dgeList_byCell[[x]]$genes$length,
+#     sizeFactors = dgeList_byCell[[x]]$samples$lib.size
+#   )
+# }, simplify = FALSE)
+# set_offset &lt;- function(dgelist, offset){
+#   dgelist$offset &lt;- offset
+#   dgelist
+# }
+# dgeList_byCell &lt;- sapply(names(dgeList_byCell), function(x){
+#   set_offset(dgeList_byCell[[x]],cqn_byCell[[x]]$glm.offset)
+# }, simplify = FALSE)
+# ```
+# 
+# ```{r dgeByTreat}
+# dgeList_AZD &lt;- sapply(names(metaByCell), function(x){
+#   sampleToKepp &lt;- grepl(paste(dplyr::filter(metaByCell[[x]], group %in% c(&quot;AZD8055_15&quot;, &quot;AZD8055_30&quot;,&quot;DMSO_0&quot;))$sample, collapse=&quot;|&quot;),dgeList_byCell[[x]]$samples$sample)
+#   dgeList_byCell[[x]][,sampleToKepp]
+# }, simplify = FALSE)
+# names(dgeList_AZD) &lt;- vapply(names(dgeList_AZD), function(x){
+#   paste(str_remove(x, &quot;.tfLC3&quot;), &quot;AZD&quot;, sep = &quot;_&quot;)
+# }, character(1))
+# # write_rds(
+# #   x = dgeList_AZD,
+# #   path = here::here(&quot;data/dgeList_AZD.rds&quot;),
+# #   compress = &quot;gz&quot;
+# # )
+# dgeList_EBSS &lt;- sapply(names(metaByCell), function(x){
+#     sampleToKepp &lt;- grepl(paste(dplyr::filter(metaByCell[[x]], group %in% c(&quot;EBSS_15&quot;, &quot;EBSS_30&quot;,&quot;DMEM_0&quot;))$sample, collapse=&quot;|&quot;),dgeList_byCell[[x]]$samples$sample)
+#   dgeList_byCell[[x]][,sampleToKepp]
+# }, simplify = FALSE)
+# names(dgeList_EBSS) &lt;- vapply(names(dgeList_EBSS), function(x){
+#   paste(str_remove(x, &quot;.tfLC3&quot;), &quot;EBSS&quot;, sep = &quot;_&quot;)
+# }, character(1))
+# dgeByCon &lt;- c(dgeList_AZD, dgeList_EBSS)
+# dgeByCon &lt;- sapply(names(dgeByCon), function(x){
+#   dgeByCon[[x]] %&gt;%
+#     estimateDisp()
+# }, simplify = FALSE)
+# write_rds(
+#   x = dgeByCon,
+#   path = here::here(&quot;data/dgeByCon.rds&quot;),
+#   compress = &quot;gz&quot;
+# )
+
+dgeByCon &lt;- here::here(&quot;output/dgeByCon.rds&quot;) %&gt;% read_rds()</code></pre>
+<p>To create the empirical null distribution of perturbation scores,
+sample labels were permuted to generate permuted logFCs and genes were
+ranked by the permuted p-values. Same number of top ranked genes as the
+number of DEGs defined under a certain condition was taken for each
+permutation and used in SPIA. This step was performed on Phoenix.</p>
+<p>SPIA algorithm was applied 1000 times for each condition. This step
+was performed on Phoenix and outputs were imported back.</p>
+<p>Looking at the distribution of permtued tAs for 10 KEGG pathways in
+HeLa_AZD8055. Most of the distributions are roughly normally
+distributed. Significance of KEGG pathway perturbation was defined by
+FDR derived from robust z-scores of observed perturbation scores, which
+was calculated by ((obs tA) - median(permuted tA))/mad(permuted tA).
+KEGG pathways with FDR &lt; 0.05 were defined to be significantly
+perturbed concensusly.</p>
+<pre class="r"><code>load(here::here(&quot;output/spia_net_permut.Rda&quot;))</code></pre>
+<pre class="r"><code>totalKegg &lt;- spia_net_permut %&gt;%
+  bind_rows() %&gt;%
+  split(f = .$gs_name) %&gt;% 
+  .[lapply(.,function(x){sum(x$tA)}) != 0] %&gt;%
+  length()
+gsToPlot &lt;- sample(1:totalKegg, 10)
+pl &lt;- spia_net_permut %&gt;%
+  bind_rows() %&gt;%
+  split(f = .$gs_name) %&gt;%
+  .[lapply(.,function(x){sum(x$tA)}) != 0] %&gt;%
+  .[gsToPlot] %&gt;%
+  lapply(function(x){
+    ggplot(x, aes(x = tA)) + 
+      geom_histogram()
+  }) 
+suppressMessages(plot_grid(plotlist = pl, 
+          nrow = 2))</code></pre>
+<p><img src="figure/Pathway_analysis_KEGG.Rmd/gsToPlot-1.png" width="1344" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>spia_net_sum &lt;- sapply(names(spia_net_permut), function(x){
+  spia_net_permut[[x]] %&gt;%
+    split(f = .$gs_name) %&gt;%
+    lapply(dplyr::mutate, 
+           MAD = mad(tA), 
+           MEDIAN = median(tA)) %&gt;%
+    lapply(dplyr::select,gs_name, MAD, 
+           MEDIAN) %&gt;%
+    lapply(unique) %&gt;%
+    bind_rows() %&gt;%
+    dplyr::filter(MAD != 0) %&gt;%
+    left_join(spia_netPer[[x]]) %&gt;%
+    mutate(
+      Z_mad = (tA - MEDIAN)/MAD) %&gt;% 
+    mutate(
+      p_mad = 2*pnorm(-abs(Z_mad)),
+      bonf_mad = p.adjust(p_mad, method = &quot;bonferroni&quot;),
+      FDR_mad = p.adjust(p_mad, method = &quot;fdr&quot;),
+      Sig = ifelse(FDR_mad &lt; 0.05, TRUE, FALSE)) %&gt;%
+    .[order(.$FDR_mad),] %&gt;%
+    mutate(Rank_spia = row_number()) 
+}, simplify = FALSE) </code></pre>
+<div id="summary-1" class="section level3">
+<h3>Summary</h3>
+<p>KEGG pathways that were significantly perturbed were extracted.
+Intersection between conditions were visualized.</p>
+<pre class="r"><code>spia_net_sig &lt;- sapply(names(spia_net_permut), function(x){
+    spia_net_sum[[x]] %&gt;%
+      dplyr::filter(FDR_mad &lt; 0.05) %&gt;%
+    pull(gs_name)  
+  }, simplify = FALSE)
+
+spia_net_sig %&gt;%
+  fromList() %&gt;%
+  .[,c(&quot;HEK293_AZD8055&quot;, &quot;HEK293_Starvation&quot;, &quot;SH-SY5Y_AZD8055&quot;, &quot;SH-SY5Y_Starvation&quot;, &quot;HeLa_AZD8055&quot;,
+                 &quot;HeLa_Starvation&quot;)] %&gt;%
+  upset(sets = colnames(.), 
+        nintersects = NA, 
+        keep.order = TRUE, 
+        queries = list(
+          list(query = intersects, 
+               params = list(&quot;HEK293_Starvation&quot;,  &quot;SH-SY5Y_Starvation&quot;, &quot;HeLa_Starvation&quot;),
+               color = &quot;orange&quot;,
+               active = T), 
+        list(query = intersects, 
+             params = list(&quot;HEK293_AZD8055&quot;,&quot;HEK293_Starvation&quot;, &quot;SH-SY5Y_AZD8055&quot;, &quot;SH-SY5Y_Starvation&quot;, &quot;HeLa_AZD8055&quot;, 
+                           &quot;HeLa_Starvation&quot;),
+             color = &quot;red&quot;,
+             active = T),
+        list(query = intersects,
+             params = list( &quot;SH-SY5Y_Starvation&quot;, &quot;SH-SY5Y_AZD8055&quot;),
+             color = &quot;blue&quot;,
+             active = T)
+        ))</code></pre>
+<div class="figure" style="text-align: center">
+<img src="figure/Pathway_analysis_KEGG.Rmd/spia_NETupset-1.png" alt="*Overlap between KEGG pathways perturbed under each condition.From the plot, there are 2 pathways enriched under all condition (red), 7 that were unique to SY5Y cell line (blue), and 1 that were unique to starvation treatment (orange). *" width="672" />
+<p class="caption">
+<em>Overlap between KEGG pathways perturbed under each condition.From
+the plot, there are 2 pathways enriched under all condition (red), 7
+that were unique to SY5Y cell line (blue), and 1 that were unique to
+starvation treatment (orange). </em>
+</p>
+</div>
+<p>Normalised perturbation scores of KEGG pathways mentioned above were
+visualised.</p>
+<pre class="r"><code>hp1_gs &lt;- spia_net_sig %&gt;%
+  Reduce(intersect,.)
+hp2_gs &lt;- spia_net_sig[str_subset(names(spia_net_sig), &quot;SH&quot;)] %&gt;%
+  Reduce(intersect,.) %&gt;%
+  setdiff(., spia_net_sig[str_subset(names(spia_net_sig), &quot;SH&quot;, negate = TRUE)] %&gt;%
+            unname() %&gt;%
+            unlist())
+hp3_gs &lt;- spia_net_sig[str_subset(names(spia_net_sig), &quot;Starvation&quot;)] %&gt;%
+  Reduce(intersect,.) %&gt;%
+  setdiff(., spia_net_sig[str_subset(names(spia_net_sig), &quot;Starvation&quot;, negate = TRUE)] %&gt;%
+            unname() %&gt;%
+            unlist())
+temp1 &lt;- sapply(names(spia_net_permut), function(x){
+  spia_net_sum[[x]] %&gt;%
+    dplyr::filter(gs_name %in% hp1_gs, 
+                  FDR_mad &lt; 0.05) %&gt;%
+    mutate(Condition = x) %&gt;%
+    dplyr::select(gs_name, Z_mad, Condition)
+}, simplify = FALSE)
+limit &lt;- temp1 %&gt;%
+  bind_rows() %&gt;%
+  pull(Z_mad) %&gt;%
+  max(abs(.))* c(-1, 1)
+hp1 &lt;- temp1 %&gt;%
+  bind_rows() %&gt;%
+  ggplot(aes(Condition, 
+             gs_name, fill = Z_mad)) +
+  geom_tile(aes(fill = Z_mad), fontsize =3) +
+  geom_text(aes(label = round(Z_mad,2))) +
+  scale_fill_distiller(palette = &quot;RdYlBu&quot;, 
+                       limit = limit,
+                       name = &quot;Normalised Perturbation Score&quot;
+                       ) +
+  theme_dark()+
+  theme(
+    axis.title=element_blank(),
+    panel.grid = element_blank(),
+    # axis.ticks = element_blank(),
+    legend.title = element_text(size= 8),
+    legend.key.size = unit(3, &#39;mm&#39;),
+    axis.text.x = element_text(angle = 45,hjust=1)
+    #   axis.text.y = element_text(colour = col)
+  ) +
+  ggtitle(&quot;Perturbed in all conditions&quot;)
+
+temp2 &lt;- sapply(str_subset(names(spia_net_sig), &quot;SH&quot;), function(x){
+  spia_net_sum[[x]] %&gt;%
+    dplyr::filter(gs_name %in% hp2_gs, 
+                  FDR_mad &lt; 0.05) %&gt;%
+    mutate(Condition = x) %&gt;%
+    dplyr::select(gs_name, Z_mad, Condition)
+}, simplify = FALSE)
+limit &lt;- temp2 %&gt;%
+  bind_rows() %&gt;%
+  pull(Z_mad) %&gt;%
+  max(abs(.))* c(-1, 1)
+hp2 &lt;- temp2 %&gt;%
+  bind_rows() %&gt;%
+  ggplot(aes(Condition, 
+             gs_name, fill = Z_mad)) +
+  geom_tile(aes(fill = Z_mad), fontsize =3) +
+  geom_text(aes(label = round(Z_mad,2))) +
+  scale_fill_distiller(palette = &quot;RdYlBu&quot;, 
+                       limit = limit,
+                       name = &quot;Normalised Perturbation Score&quot;
+                       ) +
+  theme_dark()+
+  theme(
+    axis.title=element_blank(),
+    panel.grid = element_blank(),
+    # axis.ticks = element_blank(),
+    legend.title = element_text(size= 8),
+    legend.key.size = unit(3, &#39;mm&#39;),
+    axis.text.x = element_text(angle = 45,hjust=1)
+    #   axis.text.y = element_text(colour = col)
+  ) +
+  ggtitle(&quot;Perturbed only in SY5Y&quot;)
+
+temp3 &lt;- sapply(str_subset(names(spia_net_sig), &quot;Starvation&quot;), function(x){
+  spia_net_sum[[x]] %&gt;%
+    dplyr::filter(gs_name %in% hp3_gs, 
+                  FDR_mad &lt; 0.05) %&gt;%
+    mutate(Condition = x) %&gt;%
+    dplyr::select(gs_name, Z_mad, Condition)
+}, simplify = FALSE)
+limit &lt;- temp3 %&gt;%
+  bind_rows() %&gt;%
+  pull(Z_mad) %&gt;%
+  max(abs(.))* c(-1, 1)
+hp3 &lt;- temp3 %&gt;%
+  bind_rows() %&gt;%
+  ggplot(aes(Condition, 
+             gs_name, fill = Z_mad)) +
+  geom_tile(aes(fill = Z_mad), fontsize =3) +
+  geom_text(aes(label = round(Z_mad,2))) +
+  scale_fill_distiller(palette = &quot;RdYlBu&quot;, 
+                       limit = limit,
+                       name = &quot;Normalised Perturbation Score&quot;
+                       ) +
+  theme_dark()+
+  theme(
+    axis.title=element_blank(),
+    panel.grid = element_blank(),
+    # axis.ticks = element_blank(),
+    legend.title = element_text(size= 8),
+    legend.key.size = unit(3, &#39;mm&#39;),
+    axis.text.x = element_text(angle = 45,hjust=1)
+    #   axis.text.y = element_text(colour = col)
+  ) +
+  ggtitle(&quot;Perturbed only under starvation&quot;)
+# pdf(file = &quot;/Users/wenjunliu/RNA_seq_autophagicflux/Manuscript/Figure/newest/summary_KEGG_spia(3hp).pdf&quot;,
+#     width = 14,
+#     height = 7)
+plot_grid(hp1, 
+          plot_grid(hp2, hp3, 
+                    ncol = 2, 
+                    rel_width = c(2.5, 1),
+                    scale = c(1.2, 0.8),
+                    labels = c(&quot;b&quot;, &quot;c&quot;)), 
+          nrow = 2, 
+          rel_heights = c(1, 2), 
+          labels = c(&quot;a&quot;, &quot;&quot;),
+          scale = c(0.8,1))</code></pre>
+<div class="figure" style="text-align: center">
+<img src="figure/Pathway_analysis_KEGG.Rmd/perturbKEGG_3_hp-1.png" alt="Consensus PCs of KEGG pathways significant perturbed (a) in all conditions (b) only in SY5Y cell line, and (c) only under starvation.*" width="960" />
+<p class="caption">
+Consensus PCs of KEGG pathways significant perturbed (a) in all
+conditions (b) only in SY5Y cell line, and (c) only under starvation.*
+</p>
+</div>
+<pre class="r"><code># dev.off()</code></pre>
+<pre class="r"><code>PerKEGG5 &lt;- spia_net_sum %&gt;%
+  lapply(dplyr::filter, FDR_mad &lt; 0.05) %&gt;%
+  bind_rows() %&gt;%
+  group_by(gs_name) %&gt;%
+  filter(n() &gt; 4) %&gt;%
+  pull(gs_name) %&gt;%
+  unique()
+temp &lt;- sapply(names(spia_net_permut), function(x){
+  spia_net_sum[[x]] %&gt;%
+    dplyr::filter(gs_name %in% PerKEGG5) %&gt;%
+    mutate(Condition = x) %&gt;%
+    dplyr::select(gs_name, Z_mad, Condition, Sig)
+}, simplify = FALSE) %&gt;%
+  bind_rows() %&gt;%
+  mutate(
+    Z_mad = round(Z_mad, 2),
+    Z_label = ifelse(Sig, paste(Z_mad, &quot;*&quot;, sep = &quot;&quot;), Z_mad),
+    Extreme = ifelse(abs(Z_mad) &gt; 10, TRUE, FALSE), 
+    Z_label = ifelse(Extreme, &quot;&gt;10&quot;, Z_mad))
+PerKEGG5_ro &lt;- temp %&gt;%
+  mutate(
+    nameLength = vapply(.$gs_name, 
+                        function(x){str_split(x, &quot; &quot;)[[1]] %&gt;%
+                            length},
+                        integer(1)),
+    gs_name = ifelse(nameLength &gt; 3,
+                     vapply(.$gs_name, 
+                            function(x){str_replace_nth(x, &quot; &quot;, &quot;\n&quot;, 3)},
+                            character(1)), 
+                     gs_name) ) %&gt;%
+  dplyr::select(gs_name, Z_mad, Condition) %&gt;%
+  pivot_wider(names_from = Condition, values_from = Z_mad) %&gt;%
+  replace(is.na(.),0) %&gt;%
+  column_to_rownames(&quot;gs_name&quot;) %&gt;%
+  # dist() %&gt;%
+  # hclust() 
+  mutate(overall = rowSums(.)) %&gt;%
+  .[order(.$overall, decreasing = FALSE),] %&gt;%
+  rownames(.)
+temp %&gt;%
+  mutate(
+    nameLength = vapply(.$gs_name, 
+                        function(x){str_split(x, &quot; &quot;)[[1]] %&gt;%
+                            length},
+                        integer(1)),
+    gs_name = ifelse(nameLength &gt; 3,
+                     vapply(.$gs_name, 
+                            function(x){str_replace_nth(x, &quot; &quot;, &quot;\n&quot;, 3)},
+                            character(1)), 
+                     gs_name) ) %&gt;%
+  ggplot(aes(factor(gs_name, levels = PerKEGG5_ro), Condition)) +
+  geom_tile(data = . %&gt;% dplyr::filter(!Extreme),
+            aes(fill = Z_mad)) +
+  # scale_fill_continuous_diverging(palette = &quot;Blue-Red 3&quot;,
+  #                                  name = &quot;Normalised Perturbation Score&quot;,
+  #                                  limits = c(-10,10)) +
+  scale_fill_distiller(palette = &quot;RdYlBu&quot;,
+                       limit = c(-10,10),
+                       name = &quot;Normalised\nPerturbation\nScore&quot;
+                       ) +
+  geom_tile(data = . %&gt;% dplyr::filter(Extreme),
+            fill = &quot;tomato3&quot;) +
+  geom_text(data = . %&gt;% dplyr::filter(!Sig),
+            aes(label = Z_label), size = 4, color = &quot;azure4&quot;) +
+  geom_text(data = . %&gt;% dplyr::filter(Sig),
+            aes(label = Z_label), size = 4, color = &quot;black&quot;) +
+  theme(
+    axis.title=element_blank(),
+    panel.grid = element_blank(),
+    axis.text.y =element_text(size=14),
+    axis.text.x.bottom  =element_text(size=12),
+    axis.ticks = element_blank(),
+    legend.title = element_text(size= 12),
+    legend.key.size = unit(1, &#39;cm&#39;),
+    axis.text.x = element_text(angle = 45, hjust=1, size = 10),
+    plot.margin = unit(c(0, 0, 0, 0), &quot;null&quot;),
+    panel.margin = unit(c(0, 0, 0, 0), &quot;null&quot;),
+    #   axis.text.y = element_text(colour = col)
+  ) +
+  # ggtitle(&quot;Perturbation&quot;) +
+  coord_fixed(ratio= 1.8) +
+  panel_border(remove = TRUE)</code></pre>
+<div class="figure" style="text-align: center">
+<img src="figure/Pathway_analysis_KEGG.Rmd/unnamed-chunk-1-1.png" alt="*Normalised perturbation scores of pathways that were significantly perturbed in all but one conditions*" width="1536" />
+<p class="caption">
+<em>Normalised perturbation scores of pathways that were significantly
+perturbed in all but one conditions</em>
+</p>
+</div>
+<br>
+<p>
+<button type="button" class="btn btn-default btn-workflowr btn-workflowr-sessioninfo" data-toggle="collapse" data-target="#workflowr-sessioninfo" style="display: block;">
+<span class="glyphicon glyphicon-wrench" aria-hidden="true"></span>
+Session information
+</button>
+</p>
+<div id="workflowr-sessioninfo" class="collapse">
+<pre class="r"><code>sessionInfo()</code></pre>
+<pre><code>R version 4.1.3 (2022-03-10)
+Platform: x86_64-apple-darwin17.0 (64-bit)
+Running under: macOS Big Sur/Monterey 10.16
+
+Matrix products: default
+BLAS:   /Library/Frameworks/R.framework/Versions/4.1/Resources/lib/libRblas.0.dylib
+LAPACK: /Library/Frameworks/R.framework/Versions/4.1/Resources/lib/libRlapack.dylib
+
+locale:
+[1] en_AU.UTF-8/en_AU.UTF-8/en_AU.UTF-8/C/en_AU.UTF-8/en_AU.UTF-8
+
+attached base packages:
+ [1] grid      splines   stats4    stats     graphics  grDevices utils    
+ [8] datasets  methods   base     
+
+other attached packages:
+ [1] textworks_0.0.0.9000    ggraph_2.0.5            igraph_1.2.11          
+ [4] viridis_0.6.2           viridisLite_0.4.0       ComplexHeatmap_2.10.0  
+ [7] DT_0.21                 reshape2_1.4.4          plotly_4.10.0          
+[10] kableExtra_1.3.4        goseq_1.46.0            geneLenDataBase_1.30.0 
+[13] BiasedUrn_1.07          GO.db_3.14.0            msigdbr_7.4.1          
+[16] cowplot_1.1.1           UpSetR_1.4.0            corrplot_0.92          
+[19] RColorBrewer_1.1-2      pheatmap_1.0.12         ggrepel_0.9.1          
+[22] cqn_1.40.0              quantreg_5.88           SparseM_1.81           
+[25] preprocessCore_1.56.0   nor1mix_1.3-0           mclust_5.4.9           
+[28] pander_0.6.4            scales_1.1.1            ensembldb_2.18.3       
+[31] AnnotationFilter_1.18.0 GenomicFeatures_1.46.5  AnnotationDbi_1.56.2   
+[34] Biobase_2.54.0          GenomicRanges_1.46.1    GenomeInfoDb_1.30.1    
+[37] IRanges_2.28.0          S4Vectors_0.32.3        AnnotationHub_3.2.2    
+[40] BiocFileCache_2.2.1     dbplyr_2.1.1            edgeR_3.36.0           
+[43] limma_3.50.1            magrittr_2.0.2          forcats_0.5.1          
+[46] stringr_1.4.0           dplyr_1.0.8             purrr_0.3.4            
+[49] readr_2.1.2             tidyr_1.2.0             tidyverse_1.3.1        
+[52] ngsReports_1.10.0       tibble_3.1.6            ggplot2_3.3.5          
+[55] BiocGenerics_0.40.0     workflowr_1.7.0        
+
+loaded via a namespace (and not attached):
+  [1] utf8_1.2.2                    tidyselect_1.1.2             
+  [3] RSQLite_2.2.10                htmlwidgets_1.5.4            
+  [5] BiocParallel_1.28.3           munsell_0.5.0                
+  [7] codetools_0.2-18              withr_2.5.0                  
+  [9] colorspace_2.0-3              filelock_1.0.2               
+ [11] NLP_0.2-1                     highr_0.9                    
+ [13] knitr_1.37                    rstudioapi_0.13              
+ [15] labeling_0.4.2                MatrixGenerics_1.6.0         
+ [17] git2r_0.29.0                  GenomeInfoDbData_1.2.7       
+ [19] polyclip_1.10-0               farver_2.1.0                 
+ [21] bit64_4.0.5                   rprojroot_2.0.2              
+ [23] vctrs_0.3.8                   generics_0.1.2               
+ [25] xfun_0.30                     R6_2.5.1                     
+ [27] doParallel_1.0.17             graphlayouts_0.8.0           
+ [29] clue_0.3-60                   locfit_1.5-9.5               
+ [31] bitops_1.0-7                  cachem_1.0.6                 
+ [33] DelayedArray_0.20.0           assertthat_0.2.1             
+ [35] vroom_1.5.7                   promises_1.2.0.1             
+ [37] BiocIO_1.4.0                  gtable_0.3.0                 
+ [39] processx_3.5.2                tidygraph_1.2.0              
+ [41] rlang_1.0.2                   MatrixModels_0.5-0           
+ [43] systemfonts_1.0.4             GlobalOptions_0.1.2          
+ [45] rtracklayer_1.54.0            lazyeval_0.2.2               
+ [47] broom_0.7.12                  tidytext_0.3.2               
+ [49] BiocManager_1.30.16           yaml_2.3.5                   
+ [51] modelr_0.1.8                  backports_1.4.1              
+ [53] httpuv_1.6.5                  tokenizers_0.2.1             
+ [55] tools_4.1.3                   ellipsis_0.3.2               
+ [57] jquerylib_0.1.4               ggdendro_0.1.23              
+ [59] Rcpp_1.0.8.2                  plyr_1.8.6                   
+ [61] progress_1.2.2                zlibbioc_1.40.0              
+ [63] RCurl_1.98-1.6                ps_1.6.0                     
+ [65] prettyunits_1.1.1             GetoptLong_1.0.5             
+ [67] zoo_1.8-9                     cluster_2.1.2                
+ [69] SummarizedExperiment_1.24.0   haven_2.4.3                  
+ [71] here_1.0.1                    fs_1.5.2                     
+ [73] data.table_1.14.2             circlize_0.4.14              
+ [75] reprex_2.0.1                  SnowballC_0.7.0              
+ [77] whisker_0.4                   ProtGenerics_1.26.0          
+ [79] matrixStats_0.61.0            hms_1.1.1                    
+ [81] mime_0.12                     evaluate_0.15                
+ [83] xtable_1.8-4                  XML_3.99-0.9                 
+ [85] readxl_1.3.1                  shape_1.4.6                  
+ [87] gridExtra_2.3                 compiler_4.1.3               
+ [89] biomaRt_2.50.3                crayon_1.5.0                 
+ [91] htmltools_0.5.2               mgcv_1.8-39                  
+ [93] later_1.3.0                   tzdb_0.2.0                   
+ [95] lubridate_1.8.0               DBI_1.1.2                    
+ [97] tweenr_1.0.2                  MASS_7.3-55                  
+ [99] rappdirs_0.3.3                babelgene_21.4               
+[101] Matrix_1.4-0                  cli_3.2.0                    
+[103] parallel_4.1.3                pkgconfig_2.0.3              
+[105] getPass_0.2-2                 GenomicAlignments_1.30.0     
+[107] foreach_1.5.2                 xml2_1.3.3                   
+[109] svglite_2.1.0                 bslib_0.3.1                  
+[111] webshot_0.5.2                 XVector_0.34.0               
+[113] rvest_1.0.2                   janeaustenr_0.1.5            
+[115] callr_3.7.0                   digest_0.6.29                
+[117] Biostrings_2.62.0             rmarkdown_2.13               
+[119] cellranger_1.1.0              restfulr_0.0.13              
+[121] curl_4.3.2                    shiny_1.7.1                  
+[123] Rsamtools_2.10.0              rjson_0.2.21                 
+[125] lifecycle_1.0.1               nlme_3.1-155                 
+[127] jsonlite_1.8.0                fansi_1.0.2                  
+[129] pillar_1.7.0                  lattice_0.20-45              
+[131] KEGGREST_1.34.0               fastmap_1.1.0                
+[133] httr_1.4.2                    interactiveDisplayBase_1.32.0
+[135] glue_1.6.2                    iterators_1.0.14             
+[137] png_0.1-7                     BiocVersion_3.14.0           
+[139] bit_4.0.4                     ggforce_0.3.3                
+[141] stringi_1.7.6                 sass_0.4.0                   
+[143] blob_1.2.2                    memoise_2.0.1                </code></pre>
+</div>
+</div>
+</div>
+
+
+<!-- Adjust MathJax settings so that all math formulae are shown using
+TeX fonts only; see
+https://docs.mathjax.org/en/latest/web/configuration.html. This will make
+the presentation more consistent at the cost of the webpage sometimes
+taking slightly longer to load. Note that this only works because the
+footer is added to webpages before the MathJax javascript. -->
+<script type="text/x-mathjax-config">
+  MathJax.Hub.Config({
+    "HTML-CSS": { availableFonts: ["TeX"] }
+  });
+</script>
+
+
+
+
+</div>
+</div>
+
+</div>
+
+<script>
+
+// add bootstrap table styles to pandoc tables
+function bootstrapStylePandocTables() {
+  $('tr.odd').parent('tbody').parent('table').addClass('table table-condensed');
+}
+$(document).ready(function () {
+  bootstrapStylePandocTables();
+});
+
+
+</script>
+
+<!-- tabsets -->
+
+<script>
+$(document).ready(function () {
+  window.buildTabsets("TOC");
+});
+
+$(document).ready(function () {
+  $('.tabset-dropdown > .nav-tabs > li').click(function () {
+    $(this).parent().toggleClass('nav-tabs-open');
+  });
+});
+</script>
+
+<!-- code folding -->
+<script>
+$(document).ready(function () {
+  window.initializeCodeFolding("hide" === "show");
+});
+</script>
+
+<script>
+$(document).ready(function ()  {
+
+    // temporarily add toc-ignore selector to headers for the consistency with Pandoc
+    $('.unlisted.unnumbered').addClass('toc-ignore')
+
+    // move toc-ignore selectors from section div to header
+    $('div.section.toc-ignore')
+        .removeClass('toc-ignore')
+        .children('h1,h2,h3,h4,h5').addClass('toc-ignore');
+
+    // establish options
+    var options = {
+      selectors: "h1,h2,h3",
+      theme: "bootstrap3",
+      context: '.toc-content',
+      hashGenerator: function (text) {
+        return text.replace(/[.\\/?&!#<>]/g, '').replace(/\s/g, '_');
+      },
+      ignoreSelector: ".toc-ignore",
+      scrollTo: 0
+    };
+    options.showAndHide = true;
+    options.smoothScroll = true;
+
+    // tocify
+    var toc = $("#TOC").tocify(options).data("toc-tocify");
+});
+</script>
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>

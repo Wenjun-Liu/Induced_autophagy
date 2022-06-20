@@ -1,0 +1,1515 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+
+<meta name="author" content="Wenjun Liu" />
+
+<meta name="date" content="2020-12-11" />
+
+<title>Differential Expression Analysis</title>
+
+<script src="site_libs/header-attrs-2.13/header-attrs.js"></script>
+<script src="site_libs/jquery-3.6.0/jquery-3.6.0.min.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link href="site_libs/bootstrap-3.3.5/css/cosmo.min.css" rel="stylesheet" />
+<script src="site_libs/bootstrap-3.3.5/js/bootstrap.min.js"></script>
+<script src="site_libs/bootstrap-3.3.5/shim/html5shiv.min.js"></script>
+<script src="site_libs/bootstrap-3.3.5/shim/respond.min.js"></script>
+<style>h1 {font-size: 34px;}
+       h1.title {font-size: 38px;}
+       h2 {font-size: 30px;}
+       h3 {font-size: 24px;}
+       h4 {font-size: 18px;}
+       h5 {font-size: 16px;}
+       h6 {font-size: 12px;}
+       code {color: inherit; background-color: rgba(0, 0, 0, 0.04);}
+       pre:not([class]) { background-color: white }</style>
+<script src="site_libs/jqueryui-1.11.4/jquery-ui.min.js"></script>
+<link href="site_libs/tocify-1.9.1/jquery.tocify.css" rel="stylesheet" />
+<script src="site_libs/tocify-1.9.1/jquery.tocify.js"></script>
+<script src="site_libs/navigation-1.1/tabsets.js"></script>
+<script src="site_libs/navigation-1.1/codefolding.js"></script>
+<link href="site_libs/highlightjs-9.12.0/textmate.css" rel="stylesheet" />
+<script src="site_libs/highlightjs-9.12.0/highlight.js"></script>
+
+<link rel="icon" href="https://github.com/workflowr/workflowr-assets/raw/main/img/reproducible.png">
+<!-- Add a small amount of space between sections. -->
+<style type="text/css">
+div.section {
+  padding-top: 12px;
+}
+</style>
+
+
+
+<style type="text/css">
+  code{white-space: pre-wrap;}
+  span.smallcaps{font-variant: small-caps;}
+  span.underline{text-decoration: underline;}
+  div.column{display: inline-block; vertical-align: top; width: 50%;}
+  div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+  ul.task-list{list-style: none;}
+    </style>
+
+<style type="text/css">code{white-space: pre;}</style>
+<script type="text/javascript">
+if (window.hljs) {
+  hljs.configure({languages: []});
+  hljs.initHighlightingOnLoad();
+  if (document.readyState && document.readyState === "complete") {
+    window.setTimeout(function() { hljs.initHighlighting(); }, 0);
+  }
+}
+</script>
+
+
+
+
+
+
+
+
+
+<style type = "text/css">
+.main-container {
+  max-width: 940px;
+  margin-left: auto;
+  margin-right: auto;
+}
+img {
+  max-width:100%;
+}
+.tabbed-pane {
+  padding-top: 12px;
+}
+.html-widget {
+  margin-bottom: 20px;
+}
+button.code-folding-btn:focus {
+  outline: none;
+}
+summary {
+  display: list-item;
+}
+details > summary > p:only-child {
+  display: inline;
+}
+pre code {
+  padding: 0;
+}
+</style>
+
+
+<style type="text/css">
+.dropdown-submenu {
+  position: relative;
+}
+.dropdown-submenu>.dropdown-menu {
+  top: 0;
+  left: 100%;
+  margin-top: -6px;
+  margin-left: -1px;
+  border-radius: 0 6px 6px 6px;
+}
+.dropdown-submenu:hover>.dropdown-menu {
+  display: block;
+}
+.dropdown-submenu>a:after {
+  display: block;
+  content: " ";
+  float: right;
+  width: 0;
+  height: 0;
+  border-color: transparent;
+  border-style: solid;
+  border-width: 5px 0 5px 5px;
+  border-left-color: #cccccc;
+  margin-top: 5px;
+  margin-right: -10px;
+}
+.dropdown-submenu:hover>a:after {
+  border-left-color: #adb5bd;
+}
+.dropdown-submenu.pull-left {
+  float: none;
+}
+.dropdown-submenu.pull-left>.dropdown-menu {
+  left: -100%;
+  margin-left: 10px;
+  border-radius: 6px 0 6px 6px;
+}
+</style>
+
+<script type="text/javascript">
+// manage active state of menu based on current page
+$(document).ready(function () {
+  // active menu anchor
+  href = window.location.pathname
+  href = href.substr(href.lastIndexOf('/') + 1)
+  if (href === "")
+    href = "index.html";
+  var menuAnchor = $('a[href="' + href + '"]');
+
+  // mark it active
+  menuAnchor.tab('show');
+
+  // if it's got a parent navbar menu mark it active as well
+  menuAnchor.closest('li.dropdown').addClass('active');
+
+  // Navbar adjustments
+  var navHeight = $(".navbar").first().height() + 15;
+  var style = document.createElement('style');
+  var pt = "padding-top: " + navHeight + "px; ";
+  var mt = "margin-top: -" + navHeight + "px; ";
+  var css = "";
+  // offset scroll position for anchor links (for fixed navbar)
+  for (var i = 1; i <= 6; i++) {
+    css += ".section h" + i + "{ " + pt + mt + "}\n";
+  }
+  style.innerHTML = "body {" + pt + "padding-bottom: 40px; }\n" + css;
+  document.head.appendChild(style);
+});
+</script>
+
+<!-- tabsets -->
+
+<style type="text/css">
+.tabset-dropdown > .nav-tabs {
+  display: inline-table;
+  max-height: 500px;
+  min-height: 44px;
+  overflow-y: auto;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.tabset-dropdown > .nav-tabs > li.active:before {
+  content: "";
+  font-family: 'Glyphicons Halflings';
+  display: inline-block;
+  padding: 10px;
+  border-right: 1px solid #ddd;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li.active:before {
+  content: "&#xe258;";
+  border: none;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open:before {
+  content: "";
+  font-family: 'Glyphicons Halflings';
+  display: inline-block;
+  padding: 10px;
+  border-right: 1px solid #ddd;
+}
+
+.tabset-dropdown > .nav-tabs > li.active {
+  display: block;
+}
+
+.tabset-dropdown > .nav-tabs > li > a,
+.tabset-dropdown > .nav-tabs > li > a:focus,
+.tabset-dropdown > .nav-tabs > li > a:hover {
+  border: none;
+  display: inline-block;
+  border-radius: 4px;
+  background-color: transparent;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li {
+  display: block;
+  float: none;
+}
+
+.tabset-dropdown > .nav-tabs > li {
+  display: none;
+}
+</style>
+
+<!-- code folding -->
+<style type="text/css">
+.code-folding-btn { margin-bottom: 4px; }
+</style>
+
+
+
+<style type="text/css">
+
+#TOC {
+  margin: 25px 0px 20px 0px;
+}
+@media (max-width: 768px) {
+#TOC {
+  position: relative;
+  width: 100%;
+}
+}
+
+@media print {
+.toc-content {
+  /* see https://github.com/w3c/csswg-drafts/issues/4434 */
+  float: right;
+}
+}
+
+.toc-content {
+  padding-left: 30px;
+  padding-right: 40px;
+}
+
+div.main-container {
+  max-width: 1200px;
+}
+
+div.tocify {
+  width: 20%;
+  max-width: 260px;
+  max-height: 85%;
+}
+
+@media (min-width: 768px) and (max-width: 991px) {
+  div.tocify {
+    width: 25%;
+  }
+}
+
+@media (max-width: 767px) {
+  div.tocify {
+    width: 100%;
+    max-width: none;
+  }
+}
+
+.tocify ul, .tocify li {
+  line-height: 20px;
+}
+
+.tocify-subheader .tocify-item {
+  font-size: 0.90em;
+}
+
+.tocify .list-group-item {
+  border-radius: 0px;
+}
+
+
+</style>
+
+
+
+</head>
+
+<body>
+
+
+<div class="container-fluid main-container">
+
+
+<!-- setup 3col/9col grid for toc_float and main content  -->
+<div class="row">
+<div class="col-xs-12 col-sm-4 col-md-3">
+<div id="TOC" class="tocify">
+</div>
+</div>
+
+<div class="toc-content col-xs-12 col-sm-8 col-md-9">
+
+
+
+
+<div class="navbar navbar-default  navbar-fixed-top" role="navigation">
+  <div class="container">
+    <div class="navbar-header">
+      <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-bs-toggle="collapse" data-target="#navbar" data-bs-target="#navbar">
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+      </button>
+      <a class="navbar-brand" href="index.html">Induced_autophagy</a>
+    </div>
+    <div id="navbar" class="navbar-collapse collapse">
+      <ul class="nav navbar-nav">
+        <li>
+  <a href="index.html">Home</a>
+</li>
+<li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    Quality Check
+     
+    <span class="caret"></span>
+  </a>
+  <ul class="dropdown-menu" role="menu">
+    <li>
+      <a href="HeLa_QC.html">HeLa</a>
+    </li>
+    <li>
+      <a href="SH-SY5Y.html">SH-SY5Y</a>
+    </li>
+    <li>
+      <a href="HEK293.html">HEK293</a>
+    </li>
+  </ul>
+</li>
+<li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    DE
+     
+    <span class="caret"></span>
+  </a>
+  <ul class="dropdown-menu" role="menu">
+    <li>
+      <a href="DE_analysis.html">Analysis</a>
+    </li>
+    <li>
+      <a href="DE_summary">Summary</a>
+    </li>
+  </ul>
+</li>
+<li>
+  <a href="TFT_enrichment.html">TFT ORA</a>
+</li>
+<li>
+  <a href="Pathway_analysis(KEGG).html">Pathway Analysis (KEGG)</a>
+</li>
+<li>
+  <a href="TF2KEG_network.html">TF-KEGG regulation inference</a>
+</li>
+      </ul>
+      <ul class="nav navbar-nav navbar-right">
+        
+      </ul>
+    </div><!--/.nav-collapse -->
+  </div><!--/.container -->
+</div><!--/.navbar -->
+
+<div id="header">
+
+<div class="btn-group pull-right float-right">
+<button type="button" class="btn btn-default btn-xs btn-secondary btn-sm dropdown-toggle" data-toggle="dropdown" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false"><span>Code</span> <span class="caret"></span></button>
+<ul class="dropdown-menu dropdown-menu-right" style="min-width: 50px;">
+<li><a id="rmd-show-all-code" href="#">Show All Code</a></li>
+<li><a id="rmd-hide-all-code" href="#">Hide All Code</a></li>
+</ul>
+</div>
+
+
+
+<h1 class="title toc-ignore">Differential Expression Analysis</h1>
+<h4 class="author">Wenjun Liu</h4>
+<h4 class="date">12/11/2020</h4>
+
+</div>
+
+
+<p>
+<button type="button" class="btn btn-default btn-workflowr btn-workflowr-report" data-toggle="collapse" data-target="#workflowr-report">
+<span class="glyphicon glyphicon-list" aria-hidden="true"></span>
+workflowr <span class="glyphicon glyphicon-exclamation-sign text-danger"
+aria-hidden="true"></span>
+</button>
+</p>
+<div id="workflowr-report" class="collapse">
+<ul class="nav nav-tabs">
+<li class="active">
+<a data-toggle="tab" href="#summary">Summary</a>
+</li>
+<li>
+<a data-toggle="tab" href="#checks"> Checks <span
+class="glyphicon glyphicon-exclamation-sign text-danger"
+aria-hidden="true"></span> </a>
+</li>
+<li>
+<a data-toggle="tab" href="#versions">Past versions</a>
+</li>
+</ul>
+<div class="tab-content">
+<div id="summary" class="tab-pane fade in active">
+<p>
+<strong>Last updated:</strong> 2022-03-20
+</p>
+<p>
+<strong>Checks:</strong> <span
+class="glyphicon glyphicon-ok text-success" aria-hidden="true"></span> 6
+<span class="glyphicon glyphicon-exclamation-sign text-danger"
+aria-hidden="true"></span> 1
+</p>
+<p>
+<strong>Knit directory:</strong> <code>Induced_autophagy/</code> <span
+class="glyphicon glyphicon-question-sign" aria-hidden="true"
+title="This is the local directory in which the code in this file was executed.">
+</span>
+</p>
+<p>
+This reproducible <a href="https://rmarkdown.rstudio.com">R Markdown</a>
+analysis was created with <a
+  href="https://github.com/workflowr/workflowr">workflowr</a> (version
+1.7.0). The <em>Checks</em> tab describes the reproducibility checks
+that were applied when the results were created. The <em>Past
+versions</em> tab lists the development history.
+</p>
+<hr>
+</div>
+<div id="checks" class="tab-pane fade">
+<div id="workflowr-checks" class="panel-group">
+<div class="panel panel-default">
+<div class="panel-heading">
+<p class="panel-title">
+<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongRMarkdownfilestronguncommittedchanges">
+<span class="glyphicon glyphicon-exclamation-sign text-danger"
+aria-hidden="true"></span> <strong>R Markdown file:</strong> uncommitted
+changes </a>
+</p>
+</div>
+<div id="strongRMarkdownfilestronguncommittedchanges"
+class="panel-collapse collapse">
+<div class="panel-body">
+<p>The R Markdown file has unstaged changes. To know which version of
+the R Markdown file created these results, you’ll want to first commit
+it to the Git repo. If you’re still working on the analysis, you can
+ignore this warning. When you’re finished, you can run
+<code>wflow_publish</code> to commit the R Markdown file and build the
+HTML.</p>
+</div>
+</div>
+</div>
+<div class="panel panel-default">
+<div class="panel-heading">
+<p class="panel-title">
+<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongEnvironmentstrongempty">
+<span class="glyphicon glyphicon-ok text-success"
+aria-hidden="true"></span> <strong>Environment:</strong> empty </a>
+</p>
+</div>
+<div id="strongEnvironmentstrongempty" class="panel-collapse collapse">
+<div class="panel-body">
+<p>Great job! The global environment was empty. Objects defined in the
+global environment can affect the analysis in your R Markdown file in
+unknown ways. For reproduciblity it’s best to always run the code in an
+empty environment.</p>
+</div>
+</div>
+</div>
+<div class="panel panel-default">
+<div class="panel-heading">
+<p class="panel-title">
+<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongSeedstrongcodesetseed20220317code">
+<span class="glyphicon glyphicon-ok text-success"
+aria-hidden="true"></span> <strong>Seed:</strong>
+<code>set.seed(20220317)</code> </a>
+</p>
+</div>
+<div id="strongSeedstrongcodesetseed20220317code"
+class="panel-collapse collapse">
+<div class="panel-body">
+<p>The command <code>set.seed(20220317)</code> was run prior to running
+the code in the R Markdown file. Setting a seed ensures that any results
+that rely on randomness, e.g. subsampling or permutations, are
+reproducible.</p>
+</div>
+</div>
+</div>
+<div class="panel panel-default">
+<div class="panel-heading">
+<p class="panel-title">
+<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongSessioninformationstrongrecorded">
+<span class="glyphicon glyphicon-ok text-success"
+aria-hidden="true"></span> <strong>Session information:</strong>
+recorded </a>
+</p>
+</div>
+<div id="strongSessioninformationstrongrecorded"
+class="panel-collapse collapse">
+<div class="panel-body">
+<p>Great job! Recording the operating system, R version, and package
+versions is critical for reproducibility.</p>
+</div>
+</div>
+</div>
+<div class="panel panel-default">
+<div class="panel-heading">
+<p class="panel-title">
+<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongCachestrongnone">
+<span class="glyphicon glyphicon-ok text-success"
+aria-hidden="true"></span> <strong>Cache:</strong> none </a>
+</p>
+</div>
+<div id="strongCachestrongnone" class="panel-collapse collapse">
+<div class="panel-body">
+<p>Nice! There were no cached chunks for this analysis, so you can be
+confident that you successfully produced the results during this
+run.</p>
+</div>
+</div>
+</div>
+<div class="panel panel-default">
+<div class="panel-heading">
+<p class="panel-title">
+<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongFilepathsstrongrelative">
+<span class="glyphicon glyphicon-ok text-success"
+aria-hidden="true"></span> <strong>File paths:</strong> relative </a>
+</p>
+</div>
+<div id="strongFilepathsstrongrelative" class="panel-collapse collapse">
+<div class="panel-body">
+<p>Great job! Using relative paths to the files within your workflowr
+project makes it easier to run your code on other machines.</p>
+</div>
+</div>
+</div>
+<div class="panel panel-default">
+<div class="panel-heading">
+<p class="panel-title">
+<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongRepositoryversionstrongahrefhttpsgithubcomWenjunLiuInducedautophagytree3d30821bbcd1820dd54f77d9953aa474df721c52targetblank3d30821a">
+<span class="glyphicon glyphicon-ok text-success"
+aria-hidden="true"></span> <strong>Repository version:</strong>
+<a href="https://github.com/Wenjun-Liu/Induced_autophagy/tree/3d30821bbcd1820dd54f77d9953aa474df721c52" target="_blank">3d30821</a>
+</a>
+</p>
+</div>
+<div
+id="strongRepositoryversionstrongahrefhttpsgithubcomWenjunLiuInducedautophagytree3d30821bbcd1820dd54f77d9953aa474df721c52targetblank3d30821a"
+class="panel-collapse collapse">
+<div class="panel-body">
+<p>
+Great! You are using Git for version control. Tracking code development
+and connecting the code version to the results is critical for
+reproducibility.
+</p>
+<p>
+The results in this page were generated with repository version
+<a href="https://github.com/Wenjun-Liu/Induced_autophagy/tree/3d30821bbcd1820dd54f77d9953aa474df721c52" target="_blank">3d30821</a>.
+See the <em>Past versions</em> tab to see a history of the changes made
+to the R Markdown and HTML files.
+</p>
+<p>
+Note that you need to be careful to ensure that all relevant files for
+the analysis have been committed to Git prior to generating the results
+(you can use <code>wflow_publish</code> or
+<code>wflow_git_commit</code>). workflowr only checks the R Markdown
+file, but you know if there are other scripts or data files that it
+depends on. Below is the status of the Git repository when the results
+were generated:
+</p>
+<pre><code>
+Ignored files:
+    Ignored:    -TF2KEGG_network_files/
+    Ignored:    .Rhistory
+    Ignored:    .Rproj.user/
+    Ignored:    Induced_autophagy.Rproj
+
+Untracked files:
+    Untracked:  -TF-KEGG_network.Rmd
+    Untracked:  analysis/ TF2KEGG_network.Rmd
+    Untracked:  analysis/DE_summary.Rmd
+    Untracked:  analysis/Pathway_analysis(KEGG).Rmd
+    Untracked:  analysis/TFT_enrichment.Rmd
+    Untracked:  data/2_alignedData/featureCounts/rawCounts.rds
+    Untracked:  output/BminsI.Rda
+    Untracked:  output/DE_genes.rds
+    Untracked:  output/TF_KEGG/
+    Untracked:  output/dgeByCon.rds
+    Untracked:  output/goseqTF_DE.Rda
+    Untracked:  output/goseq_kegg.rds
+    Untracked:  output/kgToGene.rds
+    Untracked:  output/spia_netPer.Rda
+    Untracked:  output/spia_net_permut.Rda
+    Untracked:  output/topTables/
+    Untracked:  site_libs/
+
+Unstaged changes:
+    Modified:   README.md
+    Deleted:    analysis/12_metaDEcopy.Rmd
+    Modified:   analysis/DE_analysis.Rmd
+    Modified:   analysis/_site.yml
+    Deleted:    analysis/about.Rmd
+    Modified:   analysis/index.Rmd
+    Deleted:    data/dgeList.rda
+
+</code></pre>
+<p>
+Note that any generated files, e.g. HTML, png, CSS, etc., are not
+included in this status report because it is ok for generated content to
+have uncommitted changes.
+</p>
+</div>
+</div>
+</div>
+</div>
+<hr>
+</div>
+<div id="versions" class="tab-pane fade">
+
+<p>
+These are the previous versions of the repository in which changes were
+made to the R Markdown (<code>analysis/DE_analysis.Rmd</code>) and HTML
+(<code>docs/DE_analysis.html</code>) files. If you’ve configured a
+remote Git repository (see <code>?wflow_git_remote</code>), click on the
+hyperlinks in the table below to view the files as they were in that
+past version.
+</p>
+<div class="table-responsive">
+<table class="table table-condensed table-hover">
+<thead>
+<tr>
+<th>
+File
+</th>
+<th>
+Version
+</th>
+<th>
+Author
+</th>
+<th>
+Date
+</th>
+<th>
+Message
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+Rmd
+</td>
+<td>
+<a href="https://github.com/Wenjun-Liu/Induced_autophagy/blob/3d30821bbcd1820dd54f77d9953aa474df721c52/analysis/DE_analysis.Rmd" target="_blank">3d30821</a>
+</td>
+<td>
+Wenjun-Liu
+</td>
+<td>
+2022-03-18
+</td>
+<td>
+half way through tidying up the DE analysis
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<hr>
+</div>
+</div>
+</div>
+<p>#Set libaries</p>
+<pre class="r"><code>library(ngsReports)
+library(tidyverse)
+library(magrittr)
+library(edgeR)
+library(AnnotationHub)
+library(ensembldb)
+library(scales)
+library(pander)
+library(cowplot)
+library(corrplot)
+library(ggrepel)
+library(RColorBrewer)
+library(pheatmap)
+library(UpSetR)
+library(msigdbr)
+library(GO.db)
+library(goseq)
+library(kableExtra)
+library(plotly)
+library(reshape2)
+library(org.Hs.eg.db)
+library(cqn)
+library(Numero)</code></pre>
+<pre class="r"><code>theme_set(theme_bw())
+panderOptions(&quot;table.split.table&quot;, Inf)
+panderOptions(&quot;table.style&quot;, &quot;rmarkdown&quot;)
+panderOptions(&quot;big.mark&quot;, &quot;,&quot;)</code></pre>
+<pre class="r"><code>ah &lt;- AnnotationHub() %&gt;%
+    subset(species == &quot;Homo sapiens&quot;) %&gt;%
+    subset(rdataclass == &quot;EnsDb&quot;)
+ensDB &lt;- ah[[&quot;AH75011&quot;]]
+genes(ensDB)</code></pre>
+<pre><code>GRanges object with 67946 ranges and 8 metadata columns:
+                  seqnames            ranges strand |         gene_id
+                     &lt;Rle&gt;         &lt;IRanges&gt;  &lt;Rle&gt; |     &lt;character&gt;
+  ENSG00000223972        1       11869-14409      + | ENSG00000223972
+  ENSG00000227232        1       14404-29570      - | ENSG00000227232
+  ENSG00000278267        1       17369-17436      - | ENSG00000278267
+  ENSG00000243485        1       29554-31109      + | ENSG00000243485
+  ENSG00000284332        1       30366-30503      + | ENSG00000284332
+              ...      ...               ...    ... .             ...
+  ENSG00000224240        Y 26549425-26549743      + | ENSG00000224240
+  ENSG00000227629        Y 26586642-26591601      - | ENSG00000227629
+  ENSG00000237917        Y 26594851-26634652      - | ENSG00000237917
+  ENSG00000231514        Y 26626520-26627159      - | ENSG00000231514
+  ENSG00000235857        Y 56855244-56855488      + | ENSG00000235857
+                    gene_name           gene_biotype seq_coord_system
+                  &lt;character&gt;            &lt;character&gt;      &lt;character&gt;
+  ENSG00000223972     DDX11L1 transcribed_unproces..       chromosome
+  ENSG00000227232      WASH7P unprocessed_pseudogene       chromosome
+  ENSG00000278267   MIR6859-1                  miRNA       chromosome
+  ENSG00000243485 MIR1302-2HG                 lncRNA       chromosome
+  ENSG00000284332   MIR1302-2                  miRNA       chromosome
+              ...         ...                    ...              ...
+  ENSG00000224240     CYCSP49   processed_pseudogene       chromosome
+  ENSG00000227629  SLC25A15P1 unprocessed_pseudogene       chromosome
+  ENSG00000237917     PARP4P1 unprocessed_pseudogene       chromosome
+  ENSG00000231514      CCNQP2   processed_pseudogene       chromosome
+  ENSG00000235857     CTBP2P1   processed_pseudogene       chromosome
+                             description   gene_id_version      symbol entrezid
+                             &lt;character&gt;       &lt;character&gt; &lt;character&gt;   &lt;list&gt;
+  ENSG00000223972 DEAD/H-box helicase .. ENSG00000223972.5     DDX11L1     &lt;NA&gt;
+  ENSG00000227232 WASP family homolog .. ENSG00000227232.5      WASH7P     &lt;NA&gt;
+  ENSG00000278267 microRNA 6859-1 [Sou.. ENSG00000278267.1   MIR6859-1     &lt;NA&gt;
+  ENSG00000243485 MIR1302-2 host gene .. ENSG00000243485.5 MIR1302-2HG     &lt;NA&gt;
+  ENSG00000284332 microRNA 1302-2 [Sou.. ENSG00000284332.1   MIR1302-2     &lt;NA&gt;
+              ...                    ...               ...         ...      ...
+  ENSG00000224240 CYCS pseudogene 49 [.. ENSG00000224240.1     CYCSP49     &lt;NA&gt;
+  ENSG00000227629 solute carrier famil.. ENSG00000227629.1  SLC25A15P1     &lt;NA&gt;
+  ENSG00000237917 poly(ADP-ribose) pol.. ENSG00000237917.1     PARP4P1     &lt;NA&gt;
+  ENSG00000231514 CCNQ pseudogene 2 [S.. ENSG00000231514.1      CCNQP2     &lt;NA&gt;
+  ENSG00000235857 C-terminal binding p.. ENSG00000235857.1     CTBP2P1     &lt;NA&gt;
+  -------
+  seqinfo: 454 sequences from GRCh38 genome</code></pre>
+<pre class="r"><code>grTrans &lt;- transcripts(ensDB)
+trLengths &lt;- exonsBy(ensDB, &quot;tx&quot;) %&gt;%
+    width() %&gt;%
+    vapply(sum, integer(1))
+mcols(grTrans)$length &lt;- trLengths[names(grTrans)]</code></pre>
+<pre class="r"><code>gcGene &lt;- grTrans %&gt;%
+  mcols() %&gt;%
+  as.data.frame() %&gt;%
+  dplyr::select(gene_id, tx_id, gc_content, length) %&gt;%
+  as_tibble() %&gt;%
+  group_by(gene_id) %&gt;%
+  summarise(
+    gc_content = sum(gc_content*length) / sum(length),
+    length = ceiling(median(length))
+  )
+grGenes &lt;- genes(ensDB)
+mcols(grGenes) %&lt;&gt;%
+  as.data.frame() %&gt;%
+  left_join(gcGene) %&gt;%
+  as.data.frame() %&gt;%
+  DataFrame()</code></pre>
+<p>Metadata of each fastq file and each sample was loaded.</p>
+<pre class="r"><code>metadata &lt;- here::here(&quot;data&quot;, &quot;metadata.txt&quot;) %&gt;%
+  read.table(header = TRUE, sep = &quot;\t&quot;,stringsAsFactors = FALSE) %&gt;% 
+  as_tibble()%&gt;%
+  mutate_at(vars(one_of(c(&quot;CELL&quot;, &quot;TREAT&quot;,&quot;CONTR&quot;, &quot;TIME&quot;))), as.factor)
+filename &lt;- here::here(&quot;data&quot;, &quot;filename.txt&quot;) %&gt;%
+  read.table(header = TRUE, sep = &quot;\t&quot;,stringsAsFactors = FALSE) %&gt;% 
+  as_tibble()%&gt;%
+  mutate_at(vars(one_of(c(&quot;CELL&quot;, &quot;TREAT&quot;,&quot;CONTR&quot;, &quot;TIME&quot;))), as.factor) %&gt;%
+  mutate(TREATED = ifelse(CONTR == 0,1,0))
+labels &lt;- structure(
+  filename$sample,
+  names = filename$Filename
+)
+#extract metadata for each cell line
+hela_metadata &lt;- metadata %&gt;%
+  dplyr::filter(CELL == &quot;HeLa.tfLC3&quot;)
+SH_metadata &lt;- metadata %&gt;%
+  dplyr::filter(CELL == &quot;SH-SY5Y.tfLC3&quot;)  
+hek_metadata &lt;- metadata %&gt;%
+  dplyr::filter(CELL == &quot;HEK293.tfLC3&quot;)  </code></pre>
+<p>Raw read counts were read in and a separate <code>DGElist</code>
+object was created for each cell line. As observed in the <a
+href="HeLa_QC.html##%20Cell%20line%20labelling%20checking">PCA plot of
+all control samples</a>, the cell-line effect was dominating the
+variability in this dataset. Therefore, all the downstream analyses were
+performed individually within each cell line, before results were
+integrated.</p>
+<pre class="r"><code>minCPM &lt;- 1.5
+minSamples &lt;- 3
+dgeList &lt;- here::here(&quot;data&quot;, &quot;2_alignedData&quot;, &quot;featureCounts&quot;, &quot;genes.out&quot;) %&gt;%
+  read_delim(delim = &quot;\t&quot;) %&gt;%
+  set_names(basename(names(.))) %&gt;%
+  as.data.frame() %&gt;%
+  column_to_rownames(&quot;Geneid&quot;) %&gt;%
+  as.matrix() %&gt;% 
+  set_colnames(str_remove(colnames(.), &quot;Aligned.sortedByCoord.out.bam&quot;)) %&gt;%
+  DGEList(
+    samples = tibble(sample = colnames(.)) %&gt;%
+      left_join(dplyr::filter(filename, read == &quot;R1&quot;)),
+    genes = grGenes[rownames(.)] %&gt;%
+      as.data.frame() %&gt;%
+      dplyr::select(
+        chromosome = seqnames, start, end, 
+        gene_id, gene_name, gene_biotype, description, 
+        entrezid, gc_content, length
+      )
+  ) %&gt;%
+  .[!grepl(&quot;rRNA&quot;, .$genes$gene_biotype),] %&gt;%
+  calcNormFactors()</code></pre>
+<div id="hela" class="section level2">
+<h2>HeLa</h2>
+<p>A <code>DGEList</code> was created for HeLa samples and conditional
+quantile normalisation (cqn) was applied to create an offset for noises
+introduced by systematic artefacts: GC content and gene length.</p>
+<pre class="r"><code>hela_cell &lt;- grepl(paste(unique(hela_metadata$sample), collapse=&quot;|&quot;),dgeList$samples$sample)  
+hela_dgeList &lt;- dgeList[,hela_cell]
+hela_dgeList %&lt;&gt;% .[rowSums(cpm(.) &gt;= minCPM) &gt;= minSamples,]
+hela_thrownGene &lt;- setdiff(dgeList$genes$gene_id, hela_dgeList$genes$gene_id)</code></pre>
+<pre class="r"><code>hela_gcCqn &lt;- cqn(
+  counts = hela_dgeList$counts,
+  x = hela_dgeList$genes$gc_content,
+  lengths = hela_dgeList$genes$length,
+  sizeFactors = hela_dgeList$samples$lib.size
+)
+# Offset was added to original dgelist
+hela_dgeList$offset &lt;- hela_gcCqn$glm.offset </code></pre>
+<p>SINCE samples treated between by two different autophagy-inducing
+treatments fell into two distinct cluster in PCA plots across all cell
+lines, analyses were also performed separately for each treatment.</p>
+<div id="azd8055" class="section level3">
+<h3>AZD8055</h3>
+<p>Hence there are two factors that are of interests: treatment and
+time, those two factors were combined into one to create model matrix
+(visualised as a heatmap shown below).</p>
+<pre class="r"><code>hela_dgeList$samples$timeGroups &lt;- paste(hela_dgeList$samples$TREAT, hela_dgeList$samples$TIME, sep = &quot;_&quot;) %&gt;%
+  as.factor()
+hela_dgeList$samples$timeGroups &lt;- relevel(hela_dgeList$samples$timeGroups, ref = &quot;DMSO_0&quot;)
+d_hela_AZD &lt;- model.matrix(~ timeGroups, data = hela_dgeList$samples %&gt;%
+                             dplyr::filter(TREAT %in% c(&quot;DMSO&quot;, &quot;AZD8055&quot;)) %&gt;%
+                             droplevels())
+d_hela_AZD &lt;- d_hela_AZD %&gt;%
+  set_colnames(c(&quot;Intercept&quot;,&quot;AZD1&quot;, &quot;AZD15&quot;, &quot;AZD30&quot;,&quot;DMSO30&quot;))
+hela_AZD &lt;- grepl(paste(dplyr::filter(hela_metadata, TREAT %in% c(&quot;AZD8055&quot;, &quot;DMSO&quot;))$sample, collapse=&quot;|&quot;),hela_dgeList$samples$sample)
+helaAZD_dgeList &lt;- hela_dgeList[,hela_AZD]
+helaAZD_dgeList %&lt;&gt;% estimateDisp(design = d_hela_AZD)</code></pre>
+<pre class="r"><code>d_hela_AZD %&gt;%
+  set_colnames(c(&quot;Intercept&quot;,&quot;Treat_1hr&quot;, &quot;Treat_15hrs&quot;, &quot;Treat_30hrs&quot;,&quot;Control_30hrs&quot;)) %&gt;%
+  as.data.frame() %&gt;%
+  rownames_to_column(&quot;sample&quot;) %&gt;%
+  left_join(metadata %&gt;%
+              mutate(group = paste(TREAT, TIME, sep= &quot;_&quot;)) %&gt;%
+              dplyr::select(group, sample)) %&gt;%
+  mutate(rownames = paste(sample, group, sep = &quot;:&quot;)) %&gt;%
+  dplyr::select(-c(&quot;group&quot;, &quot;sample&quot;)) %&gt;%
+  column_to_rownames(&quot;rownames&quot;) %&gt;%
+  pheatmap(cluster_cols = FALSE, 
+         cluster_rows = TRUE,
+         legend = FALSE, 
+         show_rownames = TRUE, 
+         fontsize_col = 12, 
+         angle_col = &quot;0&quot;)</code></pre>
+<div class="figure" style="text-align: center">
+<img src="figure/DE_analysis.Rmd/dmVisualisation-1.png" alt="*Visualisation of the pairwise design matrix for AZD8055 treatment*" width="576" />
+<p class="caption">
+<em>Visualisation of the pairwise design matrix for AZD8055
+treatment</em>
+</p>
+</div>
+<pre class="r"><code>contrast_AZD &lt;- makeContrasts(AZD1vsContr = AZD1,
+                              AZD15vsContr = AZD15,
+                              AZD30vsContr = AZD30,
+                              DMSO30vs0 = DMSO30,
+                              levels = d_hela_AZD)</code></pre>
+<p>Models were fit using the negative-binomial approaches of
+<code>glmQLFit()</code>. Top Tables were then obtained using
+quasi-likelihood (QL) F-test tests against the default fold-change
+threshold in <code>glmTreat()</code>.</p>
+<pre class="r"><code>fit_helaAZD &lt;- glmQLFit(helaAZD_dgeList)
+topTables_helaAZD  &lt;- colnames(contrast_AZD) %&gt;%
+    sapply(function(x){
+      glmTreat(fit_helaAZD, contrast = contrast_AZD[,x]) %&gt;%
+      topTags(n = Inf) %&gt;%
+      .[[&quot;table&quot;]] %&gt;%
+      as_tibble() %&gt;%
+      arrange(PValue) %&gt;%
+      dplyr::select(
+        gene_id, gene_name, logFC, logCPM, PValue, FDR, everything()) %&gt;%
+      mutate(
+        coef = x,
+        bonfP = p.adjust(PValue, &quot;bonf&quot;)
+      )
+  }, simplify = FALSE)
+# write_rds(topTables_helaAZD,
+#           file= here::here(&quot;output/topTables/topTables_helaAZD.rds&quot;),
+#           compress = &quot;gz&quot;)</code></pre>
+<p>The numbers of genes with FDR &lt; 0.05 in each group were:</p>
+<pre class="r"><code>topTables_helaAZD %&gt;%
+  lapply(dplyr::filter, FDR &lt; 0.05) %&gt;%
+  vapply(nrow, integer(1)) %&gt;%
+  pander()</code></pre>
+<table>
+<thead>
+<tr class="header">
+<th align="center">AZD1vsContr</th>
+<th align="center">AZD15vsContr</th>
+<th align="center">AZD30vsContr</th>
+<th align="center">DMSO30vs0</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="center">110</td>
+<td align="center">5,019</td>
+<td align="center">4,874</td>
+<td align="center">12</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div id="ebss" class="section level3">
+<h3>EBSS</h3>
+<p>The same steps described above were also applied on starved HeLa
+samples, using control samples cultured in DMEM media as the baseline
+control this step.</p>
+<pre class="r"><code>hela_EBSS &lt;- grepl(paste(dplyr::filter(hela_metadata, TREAT %in% c(&quot;EBSS&quot;, &quot;DMEM&quot;))$sample, collapse=&quot;|&quot;),hela_dgeList$samples$sample)
+helaEBSS_dgeList &lt;- hela_dgeList[,hela_EBSS]
+d_hela_EBSS &lt;- model.matrix(~ timeGroups, data = hela_dgeList$samples %&gt;%
+                             dplyr::filter(TREAT %in% c(&quot;DMEM&quot;, &quot;EBSS&quot;)) %&gt;%
+                             droplevels())
+d_hela_EBSS &lt;- d_hela_EBSS %&gt;%
+  set_colnames(c(&quot;Intercept&quot;,&quot;DMEM30&quot;,&quot;EBSS1&quot;, &quot;EBSS15&quot;, &quot;EBSS30&quot;))
+helaEBSS_dgeList %&lt;&gt;% estimateDisp(design = d_hela_EBSS)</code></pre>
+<pre class="r"><code>pheatmap(d_hela_EBSS,
+         cluster_cols = FALSE, 
+         cluster_rows = FALSE,
+         legend = FALSE)</code></pre>
+<div class="figure" style="text-align: center">
+<img src="figure/DE_analysis.Rmd/dmVisualisation1-1.png" alt="*Visualisation of the pairwise design matrix for EBSS8055 treatment*" width="576" />
+<p class="caption">
+<em>Visualisation of the pairwise design matrix for EBSS8055
+treatment</em>
+</p>
+</div>
+<pre class="r"><code>contrast_EBSS &lt;- makeContrasts(EBSS1vsContr = EBSS1,
+                               EBSS15vsContr = EBSS15,
+                               EBSS30vsContr = EBSS30,
+                               DMEM30vs0 = DMEM30,
+                               levels = d_hela_EBSS)</code></pre>
+<p>The numbers of DEGs detected in each comparison are:</p>
+<pre class="r"><code>fit_helaEBSS &lt;- glmQLFit(helaEBSS_dgeList)
+topTables_helaEBSS  &lt;- colnames(contrast_EBSS) %&gt;%
+  sapply(function(x){
+    glmTreat(fit_helaEBSS, contrast = contrast_EBSS[,x]) %&gt;%
+      topTags(n = Inf) %&gt;%
+      .[[&quot;table&quot;]] %&gt;%
+      as_tibble() %&gt;%
+      arrange(PValue) %&gt;%
+      dplyr::select(
+        gene_id, gene_name, logFC, logCPM, PValue, FDR, everything()) %&gt;%
+      mutate(
+        coef = x,
+        bonfP = p.adjust(PValue, &quot;bonf&quot;)
+      )
+  }, simplify = FALSE)
+# write_rds(topTables_helaEBSS,
+#           file= here::here(&quot;output/topTables/topTables_helaEBSS.rds&quot;),
+#           compress = &quot;gz&quot;)
+topTables_helaEBSS %&gt;%
+  lapply(dplyr::filter, FDR &lt; 0.05) %&gt;% 
+  vapply(nrow, integer(1)) %&gt;%
+  pander()</code></pre>
+<table>
+<thead>
+<tr class="header">
+<th align="center">EBSS1vsContr</th>
+<th align="center">EBSS15vsContr</th>
+<th align="center">EBSS30vsContr</th>
+<th align="center">DMEM30vs0</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="center">191</td>
+<td align="center">6,841</td>
+<td align="center">7,856</td>
+<td align="center">36</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<div id="sh-sy5y" class="section level2">
+<h2>SH-SY5Y</h2>
+<p>Same pipeline developed using HeLa cell line was also applied on
+SH-SY5Y cell line.</p>
+<pre class="r"><code>SH_cell &lt;- grepl(paste(unique(SH_metadata$sample), collapse=&quot;|&quot;),dgeList$samples$sample)  
+SH_dgeList &lt;- dgeList[,SH_cell]
+SH_dgeList %&lt;&gt;% .[rowSums(cpm(.) &gt;= minCPM) &gt;= minSamples,]
+SH_thrownGene &lt;- setdiff(dgeList$genes$gene_id, SH_dgeList$genes$gene_id)</code></pre>
+<pre class="r"><code>SH_gcCqn &lt;- cqn(
+  counts = SH_dgeList$counts,
+  x = SH_dgeList$genes$gc_content,
+  lengths = SH_dgeList$genes$length,
+  sizeFactors = SH_dgeList$samples$lib.size
+)
+# Offset was added to original dgelist
+SH_dgeList$offset &lt;- SH_gcCqn$glm.offset </code></pre>
+<div id="azd8055-1" class="section level3">
+<h3>AZD8055</h3>
+<pre class="r"><code>SH_dgeList$samples$timeGroups &lt;- paste(SH_dgeList$samples$TREAT, SH_dgeList$samples$TIME, sep = &quot;_&quot;) %&gt;%
+  as.factor()
+SH_dgeList$samples$timeGroups &lt;- relevel(SH_dgeList$samples$timeGroups, ref = &quot;DMSO_0&quot;)
+d_SH_AZD &lt;- model.matrix(~ timeGroups, data = SH_dgeList$samples %&gt;%
+                             dplyr::filter(TREAT %in% c(&quot;DMSO&quot;, &quot;AZD8055&quot;)) %&gt;%
+                             droplevels())
+d_SH_AZD &lt;- d_SH_AZD %&gt;%
+  set_colnames(c(&quot;Intercept&quot;,&quot;AZD1&quot;, &quot;AZD15&quot;, &quot;AZD30&quot;,&quot;DMSO15&quot;,&quot;DMSO30&quot;))
+SH_AZD &lt;- grepl(paste(dplyr::filter(SH_metadata, TREAT %in% c(&quot;AZD8055&quot;, &quot;DMSO&quot;))$sample, collapse=&quot;|&quot;),SH_dgeList$samples$sample)
+SHAZD_dgeList &lt;- SH_dgeList[,SH_AZD]
+SHAZD_dgeList %&lt;&gt;% estimateDisp(design = d_SH_AZD)</code></pre>
+<pre class="r"><code>contrast_AZD &lt;- makeContrasts(AZD1vsContr = AZD1,
+                              AZD15vsContr = AZD15,
+                              AZD30vsContr = AZD30,
+                              DMSO15vs0 = DMSO15,
+                              DMSO30vs0 = DMSO30,
+                              levels = d_SH_AZD)</code></pre>
+<p>We also collected 15 hrs control samples for SH-SY5Y cell line. The
+numbers of DEGs detected in each comparison are:</p>
+<pre class="r"><code>fit_SHAZD &lt;- glmQLFit(SHAZD_dgeList)
+topTables_SHAZD  &lt;- colnames(contrast_AZD) %&gt;%
+  sapply(function(x){
+    glmTreat(fit_SHAZD, contrast = contrast_AZD[,x]) %&gt;%
+      topTags(n = Inf) %&gt;%
+      .[[&quot;table&quot;]] %&gt;%
+      as_tibble() %&gt;%
+      arrange(PValue) %&gt;%
+      dplyr::select(
+        gene_id, gene_name, logFC, logCPM, PValue, FDR, everything()) %&gt;%
+      mutate(
+        coef = x,
+        bonfP = p.adjust(PValue, &quot;bonf&quot;)
+      )
+  }, simplify = FALSE)
+topTables_SHAZD %&gt;%
+  lapply(dplyr::filter, FDR &lt; 0.05) %&gt;% 
+  vapply(nrow, integer(1)) %&gt;%
+  pander()</code></pre>
+<table>
+<thead>
+<tr class="header">
+<th align="center">AZD1vsContr</th>
+<th align="center">AZD15vsContr</th>
+<th align="center">AZD30vsContr</th>
+<th align="center">DMSO15vs0</th>
+<th align="center">DMSO30vs0</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="center">48</td>
+<td align="center">3,571</td>
+<td align="center">3,999</td>
+<td align="center">1</td>
+<td align="center">1</td>
+</tr>
+</tbody>
+</table>
+<pre class="r"><code># write_rds(topTables_SHAZD, 
+#           path = here::here(&quot;output/topTables/topTables_SHAZD.rds&quot;), 
+#           compress = &quot;gz&quot;)</code></pre>
+</div>
+<div id="ebss-1" class="section level3">
+<h3>EBSS</h3>
+<pre class="r"><code>SH_dgeList$samples$timeGroups &lt;- relevel(SH_dgeList$samples$timeGroups, ref = &quot;DMEM_0&quot;)
+d_SH_EBSS &lt;- model.matrix(~ timeGroups, data = SH_dgeList$samples %&gt;%
+                              dplyr::filter(TREAT %in% c(&quot;DMEM&quot;, &quot;EBSS&quot;)) %&gt;%
+                              droplevels())
+d_SH_EBSS &lt;- d_SH_EBSS %&gt;%
+  set_colnames(c(&quot;Intercept&quot;,&quot;DMEM15&quot;,&quot;DMEM30&quot;,&quot;EBSS1&quot;, &quot;EBSS15&quot;, &quot;EBSS30&quot;))
+SH_EBSS &lt;- grepl(paste(dplyr::filter(SH_metadata, TREAT %in% c(&quot;EBSS&quot;, &quot;DMEM&quot;))$sample, collapse=&quot;|&quot;),SH_dgeList$samples$sample)
+SHEBSS_dgeList &lt;- SH_dgeList[,SH_EBSS]
+SHEBSS_dgeList %&lt;&gt;% estimateDisp(design = d_SH_EBSS)</code></pre>
+<pre class="r"><code>contrast_EBSS &lt;- makeContrasts(EBSS1vsContr = EBSS1,
+                               EBSS15vsContr = EBSS15,
+                               EBSS30vsContr = EBSS30,
+                               DMEM30vs0 = DMEM30,
+                               DMEM15vs0 = DMEM15,
+                               levels = d_SH_EBSS)</code></pre>
+<pre class="r"><code>fit_SHEBSS &lt;- glmQLFit(SHEBSS_dgeList)
+topTables_SHEBSS  &lt;- colnames(contrast_EBSS) %&gt;%
+  sapply(function(x){
+    glmTreat(fit_SHEBSS, contrast = contrast_EBSS[,x]) %&gt;%
+      topTags(n = Inf) %&gt;%
+      .[[&quot;table&quot;]] %&gt;%
+      as_tibble() %&gt;%
+      arrange(PValue) %&gt;%
+      dplyr::select(
+        gene_id, gene_name, logFC, logCPM, PValue, FDR, everything()) %&gt;%
+      mutate(
+        coef = x,
+        bonfP = p.adjust(PValue, &quot;bonf&quot;)
+      )
+  }, simplify = FALSE)
+topTables_SHEBSS %&gt;%
+  lapply(dplyr::filter, FDR &lt; 0.05) %&gt;% 
+  vapply(nrow, integer(1)) %&gt;%
+  pander()</code></pre>
+<table>
+<thead>
+<tr class="header">
+<th align="center">EBSS1vsContr</th>
+<th align="center">EBSS15vsContr</th>
+<th align="center">EBSS30vsContr</th>
+<th align="center">DMEM30vs0</th>
+<th align="center">DMEM15vs0</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="center">219</td>
+<td align="center">4,114</td>
+<td align="center">4,998</td>
+<td align="center">193</td>
+<td align="center">236</td>
+</tr>
+</tbody>
+</table>
+<pre class="r"><code># write_rds(topTables_SHEBSS, 
+#           path = here::here(&quot;output/topTables/topTables_SHEBSS.rds&quot;), 
+#           compress = &quot;gz&quot;)</code></pre>
+</div>
+</div>
+<div id="hek293" class="section level2">
+<h2>HEK293</h2>
+<p>Same pipeline developed using HeLa cell line was also applied on
+HEK293 cell line. However,</p>
+<pre class="r"><code>hek_cell &lt;- grepl(paste(unique(hek_metadata$sample), collapse=&quot;|&quot;),dgeList$samples$sample)  
+hek_dgeList &lt;- dgeList[,hek_cell]
+hek_dgeList %&lt;&gt;% .[rowSums(cpm(.) &gt;= minCPM) &gt;= minSamples,]
+hek_thrownGene &lt;- setdiff(dgeList$genes$gene_id, hek_dgeList$genes$gene_id)</code></pre>
+<pre class="r"><code>hek_gcCqn &lt;- cqn(
+  counts = hek_dgeList$counts,
+  x = hek_dgeList$genes$gc_content,
+  lengths = hek_dgeList$genes$length,
+  sizeFactors = hek_dgeList$samples$lib.size
+)
+# Offset was added to original dgelist
+hek_dgeList$offset &lt;- hek_gcCqn$glm.offset </code></pre>
+<div id="azd8055-2" class="section level3">
+<h3>AZD8055</h3>
+<pre class="r"><code>hek_dgeList$samples$timeGroups &lt;- paste(hek_dgeList$samples$TREAT, hek_dgeList$samples$TIME, sep = &quot;_&quot;) %&gt;%
+  as.factor()
+hek_dgeList$samples$timeGroups &lt;- relevel(hek_dgeList$samples$timeGroups, ref = &quot;DMSO_0&quot;)
+d_hek_AZD &lt;- model.matrix(~ timeGroups, data = hek_dgeList$samples %&gt;%
+                             dplyr::filter(TREAT %in% c(&quot;DMSO&quot;, &quot;AZD8055&quot;)) %&gt;%
+                             droplevels())
+d_hek_AZD &lt;- d_hek_AZD %&gt;%
+  set_colnames(c(&quot;Intercept&quot;,&quot;AZD1&quot;, &quot;AZD15&quot;, &quot;AZD30&quot;,&quot;DMSO30&quot;))
+hek_AZD &lt;- grepl(paste(dplyr::filter(hek_metadata, TREAT %in% c(&quot;AZD8055&quot;, &quot;DMSO&quot;))$sample, collapse=&quot;|&quot;),hek_dgeList$samples$sample)
+hekAZD_dgeList &lt;- hek_dgeList[,hek_AZD]
+hekAZD_dgeList %&lt;&gt;% estimateDisp(design = d_hek_AZD)</code></pre>
+<pre class="r"><code>contrast_AZD &lt;- makeContrasts(AZD1vsContr = AZD1,
+                              AZD15vsContr = AZD15,
+                              AZD30vsContr = AZD30,
+                              DMSO30vs0 = DMSO30,
+                              levels = d_hek_AZD)</code></pre>
+<pre class="r"><code>fit_hekAZD &lt;- glmQLFit(hekAZD_dgeList)
+topTables_hekAZD  &lt;- colnames(contrast_AZD) %&gt;%
+  sapply(function(x){
+    glmTreat(fit_hekAZD, contrast = contrast_AZD[,x]) %&gt;%
+      topTags(n = Inf) %&gt;%
+      .[[&quot;table&quot;]] %&gt;%
+      as_tibble() %&gt;%
+      arrange(PValue) %&gt;%
+      dplyr::select(
+        gene_id, gene_name, logFC, logCPM, PValue, FDR, everything()) %&gt;%
+      mutate(
+        coef = x,
+        bonfP = p.adjust(PValue, &quot;bonf&quot;)
+      )
+  }, simplify = FALSE)
+# write_rds(topTables_hekAZD, 
+#           path = here::here(&quot;output/topTables/topTables_hekAZD.rds&quot;), 
+#           compress = &quot;gz&quot;)
+topTables_hekAZD %&gt;%
+  lapply(dplyr::filter, FDR &lt; 0.05) %&gt;%
+  vapply(nrow, integer(1)) %&gt;%
+  pander()</code></pre>
+<table>
+<thead>
+<tr class="header">
+<th align="center">AZD1vsContr</th>
+<th align="center">AZD15vsContr</th>
+<th align="center">AZD30vsContr</th>
+<th align="center">DMSO30vs0</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="center">0</td>
+<td align="center">2,237</td>
+<td align="center">4,218</td>
+<td align="center">0</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div id="ebss-2" class="section level3">
+<h3>EBSS</h3>
+<pre class="r"><code>hek_dgeList$samples$timeGroups &lt;- relevel(hek_dgeList$samples$timeGroups, ref = &quot;DMEM_0&quot;)
+d_hek_EBSS &lt;- model.matrix(~ timeGroups, data = hek_dgeList$samples %&gt;%
+                              dplyr::filter(TREAT %in% c(&quot;DMEM&quot;, &quot;EBSS&quot;)) %&gt;%
+                              droplevels())
+d_hek_EBSS &lt;- d_hek_EBSS %&gt;%
+  set_colnames(c(&quot;Intercept&quot;,&quot;DMEM30&quot;,&quot;EBSS1&quot;, &quot;EBSS15&quot;, &quot;EBSS30&quot;))
+hek_EBSS &lt;- grepl(paste(dplyr::filter(hek_metadata, TREAT %in% c(&quot;EBSS&quot;, &quot;DMEM&quot;))$sample, collapse=&quot;|&quot;),hek_dgeList$samples$sample)
+hekEBSS_dgeList &lt;- hek_dgeList[,hek_EBSS]
+hekEBSS_dgeList %&lt;&gt;% estimateDisp(design = d_hek_EBSS)</code></pre>
+<pre class="r"><code>contrast_EBSS &lt;- makeContrasts(EBSS1vsContr = EBSS1,
+                               EBSS15vsContr = EBSS15,
+                               EBSS30vsContr = EBSS30,
+                               DMEM30vs0 = DMEM30,
+                               levels = d_hek_EBSS)</code></pre>
+<p>A large number of DEGs were detected betwee 0 and 30hrs control
+samples, aligning with the problem on 30hr HEK293 control samples
+cultured in DMEM that was detected at the <a
+href="SHSY5Y_QC.html">quality control stage</a>.</p>
+<pre class="r"><code>fit_hekEBSS &lt;- glmQLFit(hekEBSS_dgeList)
+topTables_hekEBSS  &lt;- colnames(contrast_EBSS) %&gt;%
+  sapply(function(x){
+    glmTreat(fit_hekEBSS, contrast = contrast_EBSS[,x]) %&gt;%
+      topTags(n = Inf) %&gt;%
+      .[[&quot;table&quot;]] %&gt;%
+      as_tibble() %&gt;%
+      arrange(PValue) %&gt;%
+      dplyr::select(
+         gene_id, gene_name, logFC, logCPM, PValue, FDR, everything()) %&gt;%
+      mutate(
+        coef = x,
+        bonfP = p.adjust(PValue, &quot;bonf&quot;)
+        )
+  }, simplify = FALSE)
+topTables_hekEBSS %&gt;%
+  lapply(dplyr::filter, FDR &lt; 0.05) %&gt;% 
+  vapply(nrow, integer(1)) %&gt;%
+  pander()</code></pre>
+<table>
+<thead>
+<tr class="header">
+<th align="center">EBSS1vsContr</th>
+<th align="center">EBSS15vsContr</th>
+<th align="center">EBSS30vsContr</th>
+<th align="center">DMEM30vs0</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="center">779</td>
+<td align="center">3,688</td>
+<td align="center">5,352</td>
+<td align="center">4,911</td>
+</tr>
+</tbody>
+</table>
+<pre class="r"><code># write_rds(topTables_hekEBSS,
+#           path = here::here(&quot;output/newTop/topTables_hekEBSS.rds&quot;),
+#           compress = &quot;gz&quot;)</code></pre>
+<br>
+<p>
+<button type="button" class="btn btn-default btn-workflowr btn-workflowr-sessioninfo" data-toggle="collapse" data-target="#workflowr-sessioninfo" style="display: block;">
+<span class="glyphicon glyphicon-wrench" aria-hidden="true"></span>
+Session information
+</button>
+</p>
+<div id="workflowr-sessioninfo" class="collapse">
+<pre class="r"><code>sessionInfo()</code></pre>
+<pre><code>R version 4.1.3 (2022-03-10)
+Platform: x86_64-apple-darwin17.0 (64-bit)
+Running under: macOS Big Sur/Monterey 10.16
+
+Matrix products: default
+BLAS:   /Library/Frameworks/R.framework/Versions/4.1/Resources/lib/libRblas.0.dylib
+LAPACK: /Library/Frameworks/R.framework/Versions/4.1/Resources/lib/libRlapack.dylib
+
+locale:
+[1] en_AU.UTF-8/en_AU.UTF-8/en_AU.UTF-8/C/en_AU.UTF-8/en_AU.UTF-8
+
+attached base packages:
+[1] splines   stats4    stats     graphics  grDevices utils     datasets 
+[8] methods   base     
+
+other attached packages:
+ [1] Numero_1.9.0            cqn_1.40.0              quantreg_5.88          
+ [4] SparseM_1.81            preprocessCore_1.56.0   nor1mix_1.3-0          
+ [7] mclust_5.4.9            org.Hs.eg.db_3.14.0     reshape2_1.4.4         
+[10] plotly_4.10.0           kableExtra_1.3.4        goseq_1.46.0           
+[13] geneLenDataBase_1.30.0  BiasedUrn_1.07          GO.db_3.14.0           
+[16] msigdbr_7.4.1           UpSetR_1.4.0            pheatmap_1.0.12        
+[19] RColorBrewer_1.1-2      ggrepel_0.9.1           corrplot_0.92          
+[22] cowplot_1.1.1           pander_0.6.4            scales_1.1.1           
+[25] ensembldb_2.18.3        AnnotationFilter_1.18.0 GenomicFeatures_1.46.5 
+[28] AnnotationDbi_1.56.2    Biobase_2.54.0          GenomicRanges_1.46.1   
+[31] GenomeInfoDb_1.30.1     IRanges_2.28.0          S4Vectors_0.32.3       
+[34] AnnotationHub_3.2.2     BiocFileCache_2.2.1     dbplyr_2.1.1           
+[37] edgeR_3.36.0            limma_3.50.1            magrittr_2.0.2         
+[40] forcats_0.5.1           stringr_1.4.0           dplyr_1.0.8            
+[43] purrr_0.3.4             readr_2.1.2             tidyr_1.2.0            
+[46] tidyverse_1.3.1         ngsReports_1.10.0       tibble_3.1.6           
+[49] ggplot2_3.3.5           BiocGenerics_0.40.0     workflowr_1.7.0        
+
+loaded via a namespace (and not attached):
+  [1] utf8_1.2.2                    tidyselect_1.1.2             
+  [3] RSQLite_2.2.10                htmlwidgets_1.5.4            
+  [5] grid_4.1.3                    BiocParallel_1.28.3          
+  [7] munsell_0.5.0                 DT_0.21                      
+  [9] withr_2.5.0                   colorspace_2.0-3             
+ [11] filelock_1.0.2                highr_0.9                    
+ [13] knitr_1.37                    rstudioapi_0.13              
+ [15] MatrixGenerics_1.6.0          git2r_0.29.0                 
+ [17] GenomeInfoDbData_1.2.7        bit64_4.0.5                  
+ [19] rprojroot_2.0.2               vctrs_0.3.8                  
+ [21] generics_0.1.2                xfun_0.30                    
+ [23] R6_2.5.1                      locfit_1.5-9.5               
+ [25] bitops_1.0-7                  cachem_1.0.6                 
+ [27] DelayedArray_0.20.0           assertthat_0.2.1             
+ [29] vroom_1.5.7                   promises_1.2.0.1             
+ [31] BiocIO_1.4.0                  gtable_0.3.0                 
+ [33] processx_3.5.2                rlang_1.0.2                  
+ [35] MatrixModels_0.5-0            systemfonts_1.0.4            
+ [37] rtracklayer_1.54.0            lazyeval_0.2.2               
+ [39] broom_0.7.12                  BiocManager_1.30.16          
+ [41] yaml_2.3.5                    modelr_0.1.8                 
+ [43] backports_1.4.1               httpuv_1.6.5                 
+ [45] tools_4.1.3                   ellipsis_0.3.2               
+ [47] jquerylib_0.1.4               ggdendro_0.1.23              
+ [49] Rcpp_1.0.8.2                  plyr_1.8.6                   
+ [51] progress_1.2.2                zlibbioc_1.40.0              
+ [53] RCurl_1.98-1.6                ps_1.6.0                     
+ [55] prettyunits_1.1.1             zoo_1.8-9                    
+ [57] SummarizedExperiment_1.24.0   haven_2.4.3                  
+ [59] fs_1.5.2                      here_1.0.1                   
+ [61] data.table_1.14.2             reprex_2.0.1                 
+ [63] whisker_0.4                   ProtGenerics_1.26.0          
+ [65] matrixStats_0.61.0            hms_1.1.1                    
+ [67] mime_0.12                     evaluate_0.15                
+ [69] xtable_1.8-4                  XML_3.99-0.9                 
+ [71] readxl_1.3.1                  gridExtra_2.3                
+ [73] compiler_4.1.3                biomaRt_2.50.3               
+ [75] crayon_1.5.0                  htmltools_0.5.2              
+ [77] mgcv_1.8-39                   later_1.3.0                  
+ [79] tzdb_0.2.0                    lubridate_1.8.0              
+ [81] DBI_1.1.2                     MASS_7.3-55                  
+ [83] rappdirs_0.3.3                babelgene_21.4               
+ [85] Matrix_1.4-0                  cli_3.2.0                    
+ [87] parallel_4.1.3                pkgconfig_2.0.3              
+ [89] getPass_0.2-2                 GenomicAlignments_1.30.0     
+ [91] xml2_1.3.3                    svglite_2.1.0                
+ [93] bslib_0.3.1                   webshot_0.5.2                
+ [95] XVector_0.34.0                rvest_1.0.2                  
+ [97] callr_3.7.0                   digest_0.6.29                
+ [99] Biostrings_2.62.0             rmarkdown_2.13               
+[101] cellranger_1.1.0              restfulr_0.0.13              
+[103] curl_4.3.2                    shiny_1.7.1                  
+[105] Rsamtools_2.10.0              rjson_0.2.21                 
+[107] lifecycle_1.0.1               nlme_3.1-155                 
+[109] jsonlite_1.8.0                viridisLite_0.4.0            
+[111] fansi_1.0.2                   pillar_1.7.0                 
+[113] lattice_0.20-45               KEGGREST_1.34.0              
+[115] fastmap_1.1.0                 httr_1.4.2                   
+[117] interactiveDisplayBase_1.32.0 glue_1.6.2                   
+[119] png_0.1-7                     BiocVersion_3.14.0           
+[121] bit_4.0.4                     stringi_1.7.6                
+[123] sass_0.4.0                    blob_1.2.2                   
+[125] memoise_2.0.1                </code></pre>
+</div>
+</div>
+</div>
+
+
+<!-- Adjust MathJax settings so that all math formulae are shown using
+TeX fonts only; see
+https://docs.mathjax.org/en/latest/web/configuration.html. This will make
+the presentation more consistent at the cost of the webpage sometimes
+taking slightly longer to load. Note that this only works because the
+footer is added to webpages before the MathJax javascript. -->
+<script type="text/x-mathjax-config">
+  MathJax.Hub.Config({
+    "HTML-CSS": { availableFonts: ["TeX"] }
+  });
+</script>
+
+
+
+
+</div>
+</div>
+
+</div>
+
+<script>
+
+// add bootstrap table styles to pandoc tables
+function bootstrapStylePandocTables() {
+  $('tr.odd').parent('tbody').parent('table').addClass('table table-condensed');
+}
+$(document).ready(function () {
+  bootstrapStylePandocTables();
+});
+
+
+</script>
+
+<!-- tabsets -->
+
+<script>
+$(document).ready(function () {
+  window.buildTabsets("TOC");
+});
+
+$(document).ready(function () {
+  $('.tabset-dropdown > .nav-tabs > li').click(function () {
+    $(this).parent().toggleClass('nav-tabs-open');
+  });
+});
+</script>
+
+<!-- code folding -->
+<script>
+$(document).ready(function () {
+  window.initializeCodeFolding("hide" === "show");
+});
+</script>
+
+<script>
+$(document).ready(function ()  {
+
+    // temporarily add toc-ignore selector to headers for the consistency with Pandoc
+    $('.unlisted.unnumbered').addClass('toc-ignore')
+
+    // move toc-ignore selectors from section div to header
+    $('div.section.toc-ignore')
+        .removeClass('toc-ignore')
+        .children('h1,h2,h3,h4,h5').addClass('toc-ignore');
+
+    // establish options
+    var options = {
+      selectors: "h1,h2,h3",
+      theme: "bootstrap3",
+      context: '.toc-content',
+      hashGenerator: function (text) {
+        return text.replace(/[.\\/?&!#<>]/g, '').replace(/\s/g, '_');
+      },
+      ignoreSelector: ".toc-ignore",
+      scrollTo: 0
+    };
+    options.showAndHide = true;
+    options.smoothScroll = true;
+
+    // tocify
+    var toc = $("#TOC").tocify(options).data("toc-tocify");
+});
+</script>
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>

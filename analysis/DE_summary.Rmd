@@ -1,0 +1,596 @@
+---
+title: "DE_summary"
+author: "Wenjun Liu"
+date: "29/01/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+    autodep = TRUE,
+	echo = TRUE,
+	warning = FALSE,
+	message = FALSE
+)
+```
+
+#Set libaries
+```{r loadPackages}
+library(ngsReports)
+library(tidyverse)
+library(magrittr)
+library(edgeR)
+library(AnnotationHub)
+library(ensembldb)
+library(scales)
+library(pander)
+library(cqn)
+library(ggrepel)
+library(pheatmap)
+library(RColorBrewer)
+library(corrplot)
+library(UpSetR)
+library(cowplot)
+library(msigdbr)
+library(GO.db)
+library(goseq)
+library(kableExtra)
+library(plotly)
+library(reshape2)
+library(DT)
+library(ComplexHeatmap)
+```
+
+```{r setOpts}
+theme_set(theme_bw())
+panderOptions("table.split.table", Inf)
+panderOptions("table.style", "rmarkdown")
+panderOptions("big.mark", ",")
+```
+
+```{r annotationSetup}
+ah <- AnnotationHub() %>%
+	subset(species == "Homo sapiens") %>%
+	subset(rdataclass == "EnsDb")
+ensDB <- ah[["AH75011"]]
+grTrans <- transcripts(ensDB)
+trLengths <- exonsBy(ensDB, "tx") %>%
+	width() %>%
+	vapply(sum, integer(1))
+mcols(grTrans)$length <- trLengths[names(grTrans)]
+gcGene <- grTrans %>%
+  mcols() %>%
+  as.data.frame() %>%
+  dplyr::select(gene_id, tx_id, gc_content, length) %>%
+  as_tibble() %>%
+  group_by(gene_id) %>%
+  summarise(
+    gc_content = sum(gc_content*length) / sum(length),
+    length = ceiling(median(length))
+  )
+grGenes <- genes(ensDB)
+mcols(grGenes) %<>%
+  as.data.frame() %>%
+  left_join(gcGene) %>%
+  as.data.frame() %>%
+  DataFrame()
+```
+
+Raw read counts were read in and an overall `DGElist` object was created.
+
+```{r dgeList}
+filename <- here::here("data", "filename.txt") %>%
+  read.table(header = TRUE, sep = "\t",stringsAsFactors = FALSE) %>% 
+  as_tibble()%>%
+  mutate_at(vars(one_of(c("CELL", "TREAT","CONTR", "TIME"))), as.factor) %>%
+  mutate(TREATED = ifelse(CONTR == 0,1,0))
+dgeList <- here::here("data", "2_alignedData", "featureCounts", "genes.out") %>%
+  read_delim(delim = "\t") %>%
+  set_names(basename(names(.))) %>%
+  as.data.frame() %>%
+  column_to_rownames("Geneid") %>%
+  as.matrix() %>% 
+  set_colnames(str_remove(colnames(.), "Aligned.sortedByCoord.out.bam")) %>%
+  DGEList(
+    samples = tibble(sample = colnames(.)) %>%
+      left_join(dplyr::filter(filename, read == "R1")),
+    genes = grGenes[rownames(.)] %>%
+      as.data.frame() %>%
+      dplyr::select(
+        chromosome = seqnames, start, end, 
+        gene_id, gene_name, gene_biotype, description, 
+        entrezid, gc_content, length
+      )
+  ) %>%
+  .[!grepl("rRNA", .$genes$gene_biotype),] %>%
+  calcNormFactors()
+```
+
+Autophagic flux measured for each cell line at each time point supported succesful activation of autophagy. 
+
+```{r autophagic_flux}
+metadata <- here::here("data", "metaData.txt") %>%
+  read.table(header = TRUE, sep = "\t",stringsAsFactors = FALSE) %>% 
+  as_tibble() %>%
+  mutate_at(vars(one_of(c("CELL", "TREAT","CONTR", "TIME"))), as.factor)
+
+metadata %>%
+  mutate(Time = as.numeric(as.character(TIME)), 
+         TREAT = factor(TREAT, levels = c("DMSO", "DMEM", "AZD8055", "EBSS")),
+         Group = ifelse(TREAT %in% c("DMSO", "AZD8055") , "AZD8055", "Starvation")) %>%
+  ggplot(aes(TIME, RG.ratio, color = TREAT)) +
+  geom_line(aes(group = TREAT)) +
+  scale_color_manual(values = c( "gold2","skyblue1", "darkorange1","navyblue" ), 
+                     name = "Treatment") +
+  geom_point() +
+  facet_grid (CELL ~ Group) +
+  labs(x = "Time (hs)", 
+       y = "Autophagic Flux") +
+  theme(legend.position = "top")
+```
+
+
+## Read in DE output 
+Output from [DE analyses](DE_analysis.html) were loaded. 
+
+```{r topTables}
+temp = here::here("output/topTables") %>%
+    list.files( pattern = "topTables", full.names = TRUE)
+list2env(lapply(setNames(temp, gsub("/Users/wenjunliu/Induced_autophagy/output/topTables/|.rds","",temp)), 
+         read_rds), envir = .GlobalEnv)
+topTables <- list(
+  Hek_AZD = topTables_hekAZD, 
+  Hek_EBSS = topTables_hekEBSS,
+  SH_AZD = topTables_SHAZD, 
+  SH_EBSS = topTables_SHEBSS,
+  Hela_AZD = topTables_helaAZD,
+  Hela_EBSS = topTables_helaEBSS
+)
+```
+
+```{r}
+atleast1Cell <- topTables[str_subset(names(topTables), "AZD")] %>%
+   lapply(function(x)x[["AZD1vsContr"]]$gene_name) %>%
+   Reduce(union, .) %>%
+   unique() %>%
+  length()
+allCell <- topTables[str_subset(names(topTables), "AZD")] %>%
+   lapply(function(x)x[["AZD1vsContr"]]$gene_name) %>%
+   Reduce(intersect, .) %>%
+   unique() %>%
+  length()
+```
+
+Filtration of undetectable genes was performed for each cell line separately. A total of `r atleast1Cell` genes were detected in at least one cell line and `r allCell` (`r percent(allCell/atleast1Cell)`) were detected in every cell line. 
+
+# Definition of DEGs
+
+Within each condition(cell line + treatment), DEGs were extracted by selecting genes that had FDR < 0.05 and were directionally concordant at both time points. Numbers of DEGs under each conditions are:
+
+```{r DE_op}
+DE_genes <- sapply(names(topTables),function(x){
+  sapply( str_subset(names(topTables[[x]]), "AZD15|AZD30|EBSS15|EBSS30"), function(y){
+    topTables[[x]][[y]] %>%
+      dplyr::filter(FDR < 0.05) %>%
+      mutate(dir = ifelse(logFC < 0, "down", "up")) %>%
+      dplyr::select(gene_name, gene_id, dir) %>%
+      group_by(gene_name) %>%
+      dplyr::filter(n() ==1) %>%
+      ungroup()
+  }, simplify = FALSE) %>%
+    Reduce(inner_join,.) %>%
+    .[!duplicated(.$gene_name),]
+}, simplify = FALSE)
+saveRDS(DE_genes, file = here::here("output/DE_genes.rds"))
+DE_genes %>%
+  lapply(nrow) %>%
+  pander()
+```
+
+## Consistent DEGs
+
+```{r Consist_genes}
+Consist_genes <- DE_genes %>%
+  Reduce(inner_join,.) 
+```
+
+From DEGs defined above, gene that were consistently differential expressed across the entire data-set and were directionally consistent were extracted:
+
+```{r conDT}
+Consist_genes %>%
+  dplyr::rename(
+    `Gene Name` = gene_name, 
+    `Gene ID` = gene_id, 
+    Direction = dir
+  ) %>%
+  mutate_all(as.factor) %>%
+  DT::datatable(
+    filter = "top"
+  ) %>% 
+  formatStyle(
+  'Direction',
+  backgroundColor = styleEqual(c("up", "down"), c('pink', 'lightblue'))
+)
+```
+Top 25 most significant ones among the consistent DEGs were extracted by ranking the maximum FDR (among the 12 comparisons) of those genes. Genes with lowest max_FDR were considered to be more significant. 
+
+```{r top_genes}
+top25 <- sapply(names(topTables),function(x){
+  sapply( str_subset(names(topTables[[x]]), "AZD15|AZD30|EBSS15|EBSS30"), function(y){
+    topTables[[x]][[y]] %>%
+      dplyr::filter(gene_name %in% Consist_genes$gene_name) %>%
+      mutate(
+        coeff = paste(str_split(x,"_")[[1]][1], y, sep = "_")) %>%
+      dplyr::select(gene_name, FDR, coeff) %>%
+      .[!duplicated(.$gene_name),]
+  }, simplify = FALSE) %>%
+    bind_rows()
+}, simplify = FALSE) %>%
+  bind_rows() %>%
+  pivot_wider(names_from = coeff,
+              values_from = FDR) %>%
+  mutate(max_FDR = apply(.[-1], MARGIN = 1, FUN = max, na.rm = TRUE)) %>%
+  dplyr::select(gene_name,max_FDR) %>%
+  .[order(.$max_FDR),] %>%
+  .[1:25,] %>%
+  extract2("gene_name")
+```
+
+Mean logFCs between 15 and 30hrs time point were plotted. 
+
+```{r top25_Average, fig.height=6, fig.cap="*LogFCs of the top 25 most significant consistent DEGs. Changes in gene expression in those genes were relatively consistent across the dataset.*"}
+top25_Average <- sapply(names(topTables),function(x){
+  sapply( str_subset(names(topTables[[x]]), "AZD15|AZD30|EBSS15|EBSS30"), function(y){
+    topTables[[x]][[y]] %>%
+      dplyr::filter(gene_name %in% top25) %>%
+      mutate(
+        time = str_remove(y, "vsContr"), 
+        cell = str_split(x, "_")[[1]][1],
+        coeff = paste(cell, time, sep = "_"), 
+        zscore = -sign(logFC) * qnorm(PValue/2)
+        ) %>%
+      dplyr::select(gene_name,  zscore,coeff)
+  }, simplify = FALSE) %>%
+    bind_rows() %>%
+    pivot_wider(names_from = coeff, values_from = zscore) %>%
+    mutate(aveFC = rowMeans(.[-1]), 
+           coeff = x, 
+           coeff = str_replace(coeff, "_", "+"), 
+           coeff = str_replace(coeff, "EBSS", "Star"),
+           coeff = str_replace(coeff, "Hek", "HEK293"),
+           coeff = str_replace(coeff, "SH", "SH-SY5Y"),
+           coeff = str_replace(coeff, "Hela", "HeLa")) %>%
+    dplyr::select(gene_name, coeff, aveFC)
+}, simplify = FALSE) %>%
+  bind_rows() %>%
+  pivot_wider(names_from = coeff, values_from = aveFC) %>%
+  column_to_rownames("gene_name") 
+top25_Average <- top25_Average %>%
+  Heatmap(
+    cluster_columns = FALSE,
+    column_title = NULL,
+    # show_heatmap_legend = FALSE,
+    heatmap_legend_param = list(title = "Average z_score"),
+    column_names_rot = 90, 
+    col = colorRampPalette(rev(brewer.pal(n = 7, name =
+                                                          "RdYlBu")))(100),
+    column_split = rep(c(1,2,3),each = 2),
+  row_km = 2,
+  cluster_column_slices = FALSE,
+  row_title = c("", ""),
+    height = unit(0.5, "cm") * nrow(.),
+    width = unit(1, "cm") * ncol(.)) 
+
+draw(top25_Average)
+```
+
+## Treatment specific effects
+
+
+### mTOR-inhibition
+
+To extract mTOR-inhibition-specific DEGs, genes were sorted according to the maximum PFDR across all mTOR-inhibition experiments. We also required that all mTOR-inhibition responses were directionally concordant and that the mean log2 fold change across starvation experiments was in the opposite direction.
+
+```{r AZD_unique}
+AZD_all <- DE_genes[str_subset(names(DE_genes), "AZD")] %>%
+  Reduce(inner_join, .) 
+EBSS_aveDir <- sapply(str_subset(names(topTables), "EBSS"),function(x){
+  sapply( str_subset(names(topTables[[x]]), "EBSS15|EBSS30"), function(y){
+    topTables[[x]][[y]] %>%
+      mutate(
+        time = str_remove(y, "vsContr"), 
+        cell = str_split(x, "_")[[1]][1],
+        coeff = paste(cell, time, sep = "_")
+        ) %>%
+      dplyr::select(gene_name,logFC,coeff)
+  }, simplify = FALSE) %>%
+    bind_rows() %>%
+    unique()}, simplify = FALSE) %>%
+    bind_rows() %>%
+  group_by(gene_name) %>%
+  mutate(aveFC = mean(logFC), 
+         dir_EBSS = ifelse(aveFC < 0, "down", "up")) %>%
+  ungroup() %>%
+  dplyr::select(gene_name,  dir_EBSS) %>%
+  unique()
+AZD_unique <- AZD_all %>%
+  left_join(EBSS_aveDir) %>%
+  dplyr::filter(dir != dir_EBSS)
+```
+
+The top 25 most significant ones were extracted:
+```{r top25_AZD}
+top25_AZD <- sapply(str_subset(names(topTables), "AZD"),function(x){
+  sapply( str_subset(names(topTables[[x]]), "AZD15|AZD30"), function(y){
+    topTables[[x]][[y]] %>%
+      dplyr::filter(gene_name %in% AZD_unique$gene_name) %>%
+      mutate(
+        coeff = paste(str_split(x,"_")[[1]][1], y, sep = "_")) %>%
+      dplyr::select(gene_name, FDR, coeff) %>%
+      .[!duplicated(.$gene_name),]
+  }, simplify = FALSE) %>%
+    bind_rows()
+}, simplify = FALSE) %>%
+  bind_rows() %>%
+  pivot_wider(names_from = coeff,
+              values_from = FDR) %>%
+  mutate(max_FDR = apply(.[-1], MARGIN = 1, FUN = max, na.rm = TRUE)) %>%
+  dplyr::select(gene_name,max_FDR) %>%
+  .[order(.$max_FDR),] %>%
+  .[1:25,] %>%
+  extract2("gene_name")
+```
+
+```{r top25AZD_hp, fig.height=6, fig.cap="*LogFCs of the top 25 most significant DEGs that were unique to mTOR-inhibited samples*"}
+top25AZD_aveFC <- sapply(names(topTables),function(x){
+  sapply( str_subset(names(topTables[[x]]), "AZD15|AZD30|EBSS15|EBSS30"), function(y){
+    topTables[[x]][[y]] %>%
+      dplyr::filter(gene_name %in% top25_AZD) %>%
+      mutate(
+        time = str_remove(y, "vsContr"), 
+        cell = str_split(x, "_")[[1]][1],
+        coeff = paste(cell, time, sep = "_"), 
+        zscore = -sign(logFC) * qnorm(PValue/2)
+        ) %>%
+      dplyr::select(gene_name,  zscore,coeff)
+  }, simplify = FALSE) %>%
+    bind_rows() %>%
+    pivot_wider(names_from = coeff, values_from = zscore) %>%
+    mutate(aveFC = rowMeans(.[-1]), 
+           coeff = x, 
+           coeff = str_replace(coeff, "_", "+"), 
+           coeff = str_replace(coeff, "EBSS", "Star"),
+           coeff = str_replace(coeff, "Hek", "HEK293"),
+           coeff = str_replace(coeff, "SH", "SH-SY5Y"),
+           coeff = str_replace(coeff, "Hela", "HeLa")) %>%
+    dplyr::select(gene_name, coeff, aveFC)
+}, simplify = FALSE) %>%
+  bind_rows() %>%
+  pivot_wider(names_from = coeff, values_from = aveFC) %>%
+  column_to_rownames("gene_name")
+top25AZD_aveFC %>%
+  Heatmap(
+    cluster_columns = FALSE,
+    column_title = NULL,
+    # show_heatmap_legend = FALSE,
+    heatmap_legend_param = list(title = "Average z_score"),
+    column_names_rot = 90, 
+    col = colorRampPalette(rev(brewer.pal(n = 7, name =
+                                                          "RdYlBu")))(100),
+    column_split = rep(c(1,2,3),each = 2),
+  row_km = 2,
+  cluster_column_slices = FALSE,
+  row_title = c("", ""),
+    height = unit(0.5, "cm") * nrow(.),
+    width = unit(1, "cm") * ncol(.)) 
+```
+
+### Starvation
+
+The same strategy was applied to extract starvation-specific DEGs. 
+
+```{r EBSS_unique}
+EBSS_all <- DE_genes[str_subset(names(DE_genes), "EBSS")] %>%
+  Reduce(inner_join, .)
+AZD_aveDir <- sapply(str_subset(names(topTables), "AZD"),function(x){
+  sapply( str_subset(names(topTables[[x]]), "AZD15|AZDSS30"), function(y){
+    topTables[[x]][[y]] %>%
+      mutate(
+        time = str_remove(y, "vsContr"),
+        cell = str_split(x, "_")[[1]][1],
+        coeff = paste(cell, time, sep = "_")
+      ) %>%
+      dplyr::select(gene_name,logFC,coeff)
+  }, simplify = FALSE) %>%
+    bind_rows() %>%
+    unique()}, simplify = FALSE) %>%
+  bind_rows() %>%
+  group_by(gene_name) %>%
+  mutate(aveFC = mean(logFC),
+         dir_AZD = ifelse(aveFC < 0, "down", "up")) %>%
+  ungroup() %>%
+  dplyr::select(gene_name,  dir_AZD) %>%
+  unique()
+EBSS_unique <- EBSS_all %>%
+  left_join(AZD_aveDir) %>%
+  dplyr::filter(dir != dir_AZD)
+top25_EBSS <- sapply(str_subset(names(topTables), "EBSS"),function(x){
+  sapply( str_subset(names(topTables[[x]]), "EBSS15|EBSS30"), function(y){
+    topTables[[x]][[y]] %>%
+      dplyr::filter(gene_name %in% EBSS_unique$gene_name) %>%
+      mutate(
+        coeff = paste(str_split(x,"_")[[1]][1], y, sep = "_")) %>%
+      dplyr::select(gene_name, FDR, coeff) %>%
+      .[!duplicated(.$gene_name),]
+  }, simplify = FALSE) %>%
+    bind_rows()
+}, simplify = FALSE) %>%
+  bind_rows() %>%
+  pivot_wider(names_from = coeff,
+              values_from = FDR) %>%
+  mutate(max_FDR = apply(.[-1], MARGIN = 1, FUN = max, na.rm = TRUE)) %>%
+  dplyr::select(gene_name,max_FDR) %>%
+  .[order(.$max_FDR),] %>%
+  .[1:25,] %>%
+  extract2("gene_name")
+
+```
+
+```{r top25EBSS_hp, fig.height=6, fig.cap="*LogFCs of the top 25 most significant DEGs that were unique to starvation samples*"}
+top25EBSS_aveFC <- sapply(names(topTables),function(x){
+  sapply( str_subset(names(topTables[[x]]), "EBSS15|EBSS30|AZD15|AZD30"), function(y){
+    topTables[[x]][[y]] %>%
+      dplyr::filter(gene_name %in% top25_EBSS) %>%
+      mutate(
+        time = str_remove(y, "vsContr"), 
+        cell = str_split(x, "_")[[1]][1],
+        coeff = paste(cell, time, sep = "_"), 
+        zscore = -sign(logFC) * qnorm(PValue/2)
+      ) %>%
+      dplyr::select(gene_name,  zscore,coeff)
+  }, simplify = FALSE) %>%
+    bind_rows() %>%
+    pivot_wider(names_from = coeff, values_from = zscore) %>%
+    mutate(aveFC = rowMeans(.[-1]), 
+           coeff = x, 
+           coeff = str_replace(coeff, "_", "+"), 
+           coeff = str_replace(coeff, "EBSS", "Star"),
+           coeff = str_replace(coeff, "Hek", "HEK293"),
+           coeff = str_replace(coeff, "SH", "SH-SY5Y"),
+           coeff = str_replace(coeff, "Hela", "HeLa")) %>%
+    dplyr::select(gene_name, coeff, aveFC)
+}, simplify = FALSE) %>%
+  bind_rows() %>%
+  pivot_wider(names_from = coeff, values_from = aveFC) %>%
+  column_to_rownames("gene_name")
+top25EBSS_aveFC %>%
+  Heatmap(
+    cluster_columns = FALSE,
+    column_title = NULL,
+    # show_heatmap_legend = FALSE,
+    heatmap_legend_param = list(title = "Average z_score"),
+    column_names_rot = 90, 
+    col = colorRampPalette(rev(brewer.pal(n = 7, name =
+                                            "RdYlBu")))(100),
+    column_split = rep(c(1,2,3),each = 2),
+    row_km = 2,
+    cluster_column_slices = FALSE,
+    row_title = c("", ""),
+    height = unit(0.5, "cm") * nrow(.),
+    width = unit(1, "cm") * ncol(.)) 
+```
+## SH-SY5Y specific 
+
+To extract DEGs that were unique to SH-SY5Y, genes were sorted according to the maximum PFDR across responses in the SH-SY5Y cells. Missing signals were set to zero log2 fold change in other cell lines. We also required that the mean log2 fold changes in other cells were in the opposite direction to SH-SY5Y responses.
+
+```{r SY5Y_unique}
+SY5Y_all <- DE_genes[str_subset(names(DE_genes), "SH")] %>%
+  Reduce(inner_join, .) 
+otherCell_aveDir <- sapply(str_subset(names(topTables), "SH", negate = TRUE),function(x){
+  sapply( str_subset(names(topTables[[x]]), "EBSS15|EBSS30|AZD15|AAZD30"), function(y){
+    topTables[[x]][[y]] %>%
+      mutate(
+        time = str_remove(y, "vsContr"), 
+        cell = str_split(x, "_")[[1]][1],
+        coeff = paste(cell, time, sep = "_")
+      ) %>%
+      dplyr::select(gene_name,logFC,coeff)
+  }, simplify = FALSE) %>%
+    bind_rows() %>%
+    unique()}, simplify = FALSE) %>%
+  bind_rows() %>%
+  group_by(gene_name) %>%
+  mutate(aveFC = mean(logFC), 
+         dir_EBSS = ifelse(aveFC < 0, "down", "up")) %>%
+  ungroup() %>%
+  dplyr::select(gene_name,  dir_EBSS) %>%
+  unique()
+SY5Y_unique <- SY5Y_all %>%
+  left_join(otherCell_aveDir) %>%
+  dplyr::filter(dir != dir_EBSS)
+```
+
+The top 25 most significant ones were extracted:
+```{r top25_SY5Y}
+top25_SY5Y <- sapply(str_subset(names(topTables), "SH"),function(x){
+  sapply( str_subset(names(topTables[[x]]), "AZD15|AZD30|EBSS15|EBSS30"), function(y){
+    topTables[[x]][[y]] %>%
+      dplyr::filter(gene_name %in% SY5Y_unique$gene_name) %>%
+      mutate(
+        coeff = paste(str_split(x,"_")[[1]][1], y, sep = "_")) %>%
+      dplyr::select(gene_name, FDR, coeff) %>%
+      .[!duplicated(.$gene_name),]
+  }, simplify = FALSE) %>%
+    bind_rows()
+}, simplify = FALSE) %>%
+  bind_rows() %>%
+  pivot_wider(names_from = coeff,
+              values_from = FDR) %>%
+  mutate(max_FDR = apply(.[-1], MARGIN = 1, FUN = max, na.rm = TRUE)) %>%
+  dplyr::select(gene_name,max_FDR) %>%
+  .[order(.$max_FDR),] %>%
+  .[1:25,] %>%
+  extract2("gene_name")
+```
+
+```{r top25SY5Y_hp, fig.height=6, fig.cap="*LogFCs of the top 25 most significant DEGs that were unique to SH-SY5Y samples*"}
+top25SY5Y_aveFC <- sapply(names(topTables),function(x){
+  sapply( str_subset(names(topTables[[x]]), "AZD15|AZD30|EBSS15|EBSS30"), function(y){
+    topTables[[x]][[y]] %>%
+      dplyr::filter(gene_name %in% top25_SY5Y) %>%
+      mutate(
+        time = str_remove(y, "vsContr"), 
+        cell = str_split(x, "_")[[1]][1],
+        coeff = paste(cell, time, sep = "_"), 
+        zscore = -sign(logFC) * qnorm(PValue/2)
+        ) %>%
+      dplyr::select(gene_name,  zscore,coeff)
+  }, simplify = FALSE) %>%
+    bind_rows() %>%
+    pivot_wider(names_from = coeff, values_from = zscore) %>%
+    mutate(aveFC = rowMeans(.[-1]), 
+           coeff = x, 
+           coeff = str_replace(coeff, "_", "+"), 
+           coeff = str_replace(coeff, "EBSS", "Star"),
+           coeff = str_replace(coeff, "Hek", "HEK293"),
+           coeff = str_replace(coeff, "SH", "SH-SY5Y"),
+           coeff = str_replace(coeff, "Hela", "HeLa")) %>%
+    dplyr::select(gene_name, coeff, aveFC)
+}, simplify = FALSE) %>%
+  bind_rows() %>%
+  pivot_wider(names_from = coeff, values_from = aveFC) %>%
+  column_to_rownames("gene_name")
+top25SY5Y_aveFC %>%
+  replace(is.na(.), 0) %>%
+  Heatmap(
+    cluster_columns = FALSE,
+    column_title = NULL,
+    # show_heatmap_legend = FALSE,
+    heatmap_legend_param = list(title = "Average z_score"),
+    column_names_rot = 90, 
+    col = colorRampPalette(rev(brewer.pal(n = 7, name =
+                                                          "RdYlBu")))(100),
+    column_split = rep(c(1,2,3),each = 2),
+  row_km = 2,
+  cluster_column_slices = FALSE,
+  row_title = c("", ""),
+    height = unit(0.5, "cm") * nrow(.),
+    width = unit(1, "cm") * ncol(.)) 
+```
+
+For downstream analyses, the average logFCs of all expressed genes and DEGs under each condition were calculated. 
+
+```{r all_fc, fig.width=14, fig.cap="*Boxplots of logFCs observed within each condition.*"}
+all_fc <- sapply(names(topTables), function(x){
+  topTables[[x]][[str_subset(names(topTables[[x]]), "AZD15|EBSS15")]] %>%
+    dplyr::rename(hr15 = logFC) %>%
+  dplyr::select(gene_name, hr15) %>%
+    left_join(topTables[[x]][[str_subset(names(topTables[[x]]), "AZD30|EBSS30")]]) %>%
+    dplyr::select(gene_name, logFC, hr15) %>%
+    dplyr::rename(hr30 = logFC) %>%
+    mutate(aveFC = rowMeans(.[-1])) %>%
+    dplyr::select(gene_name,aveFC) %>%
+    .[!duplicated(.$gene_name),]
+}, simplify = FALSE)
+```
+

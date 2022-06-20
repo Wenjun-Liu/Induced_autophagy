@@ -1,0 +1,573 @@
+---
+title: "TF2KEGG_network"
+output: html_document
+date: '2022-03-20'
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+    autodep = TRUE,
+	echo = TRUE,
+	warning = FALSE,
+	message = FALSE
+)
+```
+
+#Set libaries
+```{r loadPackages}
+library(ngsReports)
+library(tidyverse)
+library(magrittr)
+library(edgeR)
+library(AnnotationHub)
+library(ensembldb)
+library(scales)
+library(pander)
+library(cqn)
+library(ggrepel)
+library(pheatmap)
+library(RColorBrewer)
+library(corrplot)
+library(UpSetR)
+library(cowplot)
+library(msigdbr)
+library(GO.db)
+library(goseq)
+library(kableExtra)
+library(plotly)
+library(reshape2)
+library(DT)
+library(ComplexHeatmap)
+library(viridis)
+library(igraph)
+library(ggraph)
+```
+
+```{r setOpts}
+theme_set(theme_bw())
+panderOptions("table.split.table", Inf)
+panderOptions("table.style", "rmarkdown")
+panderOptions("big.mark", ",")
+```
+
+```{r annotationSetup}
+ah <- AnnotationHub() %>%
+	subset(species == "Homo sapiens") %>%
+	subset(rdataclass == "EnsDb")
+ensDB <- ah[["AH75011"]]
+grTrans <- transcripts(ensDB)
+trLengths <- exonsBy(ensDB, "tx") %>%
+	width() %>%
+	vapply(sum, integer(1))
+mcols(grTrans)$length <- trLengths[names(grTrans)]
+gcGene <- grTrans %>%
+  mcols() %>%
+  as.data.frame() %>%
+  dplyr::select(gene_id, tx_id, gc_content, length) %>%
+  as_tibble() %>%
+  group_by(gene_id) %>%
+  summarise(
+    gc_content = sum(gc_content*length) / sum(length),
+    length = ceiling(median(length))
+  )
+grGenes <- genes(ensDB)
+mcols(grGenes) %<>%
+  as.data.frame() %>%
+  left_join(gcGene) %>%
+  as.data.frame() %>%
+  DataFrame()
+```
+
+Raw read counts were read in and an overall `DGElist` object was created.
+
+```{r dgeList}
+filename <- here::here("data", "filename.txt") %>%
+  read.table(header = TRUE, sep = "\t",stringsAsFactors = FALSE) %>% 
+  as_tibble()%>%
+  mutate_at(vars(one_of(c("CELL", "TREAT","CONTR", "TIME"))), as.factor) %>%
+  mutate(TREATED = ifelse(CONTR == 0,1,0))
+dgeList <- here::here("data", "2_alignedData", "featureCounts", "genes.out") %>%
+  read_delim(delim = "\t") %>%
+  set_names(basename(names(.))) %>%
+  as.data.frame() %>%
+  column_to_rownames("Geneid") %>%
+  as.matrix() %>% 
+  set_colnames(str_remove(colnames(.), "Aligned.sortedByCoord.out.bam")) %>%
+  DGEList(
+    samples = tibble(sample = colnames(.)) %>%
+      left_join(dplyr::filter(filename, read == "R1")),
+    genes = grGenes[rownames(.)] %>%
+      as.data.frame() %>%
+      dplyr::select(
+        chromosome = seqnames, start, end, 
+        gene_id, gene_name, gene_biotype, description, 
+        entrezid, gc_content, length
+      )
+  ) %>%
+  .[!grepl("rRNA", .$genes$gene_biotype),] %>%
+  calcNormFactors()
+```
+
+# Retrieve TFT gene-sets
+
+
+```{r tf}
+entrezGenes <- dgeList$genes %>%
+  unnest(entrezid) %>%
+  dplyr::rename(entrez_gene = entrezid)
+# save(entrezGenes, file = here::here("output/Simplified/entrezGenes.Rda"))
+tf <- msigdbr("Homo sapiens", category = "C3") %>%
+  dplyr::filter(gs_subcat %in% c("TFT:GTRD", "TFT:TFT_Legacy")) %>%
+  dplyr::rename(gene_id = ensembl_gene) %>%
+  dplyr::filter(!is.na(gene_id)) %>%
+  distinct(gs_name, gene_id, .keep_all = TRUE)
+tfByGene <- tf  %>%
+  split(f = .$gene_id) %>%
+  lapply(extract2, "gs_name")
+tfByID <- tf  %>%
+  split(f = .$gs_name) %>%
+  lapply(extract2, "gene_symbol")
+```
+
+
+#  TF-KEGG network
+
+Knowing what TFT gene-sets and KEGG pathways were enriched among the data-set. We then hypothesized that the enriched TFs were the driver of gene signatures detected while the significantly regulated KEGG were the reflection of gene signatures on pathway level. 
+
+We wanted to infer a regulatory network between the TFs and KEGG, which will allow us to integrate the two pieces of information.
+
+To achieve that, KEGG pathways perturbed due to the deferentially expressed target genes of enriched TFs were tested through modified SPIA. 
+
+```{r goseqTF_DE}
+load(here::here("output/goseqTF_DE.Rda"))
+goseqTF_DE_sig <- goseqTF_DE %>%
+  lapply(dplyr::filter, FDR < 0.05) %>%
+  lapply(pull, gs_name)
+goseq_all <- goseqTF_DE_sig %>%
+  Reduce(intersect,.)
+goseq_SY5Y <- goseqTF_DE_sig[str_subset(names(goseqTF_DE_sig), "SH")] %>%
+  Reduce(intersect,.) %>%
+  setdiff(., goseqTF_DE_sig[str_subset(names(goseqTF_DE_sig), "SH", negate = TRUE)] %>%
+            unname() %>%
+            unlist())
+goseq_EBSS <- goseqTF_DE_sig[str_subset(names(goseqTF_DE_sig), "Starvation")] %>%
+  Reduce(intersect,.) %>%
+  setdiff(., goseqTF_DE_sig[str_subset(names(goseqTF_DE_sig), "Starvation", negate = TRUE)] %>%
+            unname() %>%
+            unlist())
+```
+
+## Consistent TFs
+
+30 TFs were consistently enriched under all conditions with an FDR < 0.05. DEGs that were also target genes of those TFs were extracted and used as input of SPIA. Observed PCs were derived locally while the permutation was performed on phoenix
+
+```{r consTF_DE}
+DE_genes <- readRDS(here::here("output/DE_genes.rds"))
+names(DE_genes) <- c("HEK293_AZD8055","HEK293_Starvation","SH-SY5Y_AZD8055", "SH-SY5Y_Starvation","HeLa_AZD8055","HeLa_Starvation")
+consTF_DE <- sapply(goseq_all, function(y){
+  sapply(names(DE_genes), function(x){
+    DE_genes[[x]] %>%
+      dplyr::filter(gene_name %in% tfByID[[y]]) %>%
+      left_join(grGenes %>%
+                  as.data.frame() %>%
+                  distinct(gene_id, .keep_all = TRUE) %>%
+                  dplyr::select(gene_id, gene_name))
+    
+  }, simplify = FALSE)
+}, simplify = FALSE)
+```
+
+```{r  spia_consTF}
+# load("/Users/wenjunliu/Induced_autophagy/output/BminsI.Rda")
+# consTF_expressed <- sapply(names(consTF_DE), function(y){
+#   sapply(names(DE_genes), function(x){
+#     DE_genes[[x]] %>%
+#       dplyr::filter(gene_name %in% consTF_DE[[y]][[x]]$gene_name) %>%
+#       left_join(entrezGenes) %>%
+#       drop_na() %>%
+#       mutate(entrez_gene = paste("ENTREZID:", entrez_gene, sep = "")) %>%
+#       dplyr::select(entrez_gene, aveFC, gene_name) %>%
+#       .[!duplicated(.$entrez_gene),]
+#   }, simplify = FALSE)
+# }, simplify = FALSE)
+# consTF_expressed <- sapply(names(consTF_expressed), function(y){
+#   sapply(names(consTF_expressed[[y]]), function(x){
+#     consTF_expressed[[y]][[x]] %>%
+#       extract2("aveFC") %>%
+#       set_names(consTF_expressed[[y]][[x]]$entrez_gene)
+#   }, simplify = FALSE)
+# }, simplify = FALSE)
+# spia_consTF <- sapply(names(consTF_expressed), function(y){
+#   sapply(names(consTF_expressed[[y]]), function(x){
+#     spia_my(de = consTF_expressed[[y]][[x]], BminsI = BminsI)
+#   }, simplify = FALSE)
+# }, simplify = FALSE)
+# save(spia_consTF, file = here::here("output/TF_KEGG/spia_consTF.Rda"))
+load(here::here("output/TF_KEGG/spia_consTF.Rda"))
+load(here::here("output/TF_KEGG/spia_consTF_permut.Rda"))
+```
+
+```{r spia_consTF_sum}
+ spia_consTF_sum <- sapply(names(spia_consTF), function(x){
+  sapply(names(spia_consTF_permut[[x]]), function(y){
+    spia_consTF_permut[[x]][[y]] %>%
+      split(f = .$gs_name) %>%
+      lapply(dplyr::mutate, 
+             MAD = mad(tA), 
+             MEDIAN = median(tA)) %>%
+      lapply(dplyr::select,gs_name, MAD, 
+             MEDIAN) %>%
+      lapply(unique) %>%
+      bind_rows() %>%
+      dplyr::filter(MAD != 0) %>%
+      left_join(spia_consTF[[x]][[y]]) %>%
+      mutate(
+             Z_mad = (tA - MEDIAN)/MAD) %>% 
+      mutate(
+             p_mad = 2*pnorm(-abs(Z_mad)),
+             bonf_mad = p.adjust(p_mad, method = "bonferroni"),
+             FDR_mad = p.adjust(p_mad, method = "fdr"),
+             Sig = ifelse(FDR_mad < 0.05, TRUE, FALSE)) %>%
+      .[order(.$FDR_mad),] %>%
+      mutate(Rank_spia = row_number()) 
+  # %>%
+  #     dplyr::filter(!Z_mad %in% c("-Inf", "Inf"))
+  }, simplify = FALSE) 
+}, simplify = FALSE)
+spia_consTF_sig <- sapply(names(spia_consTF_sum), function(x){
+  sapply(names(spia_consTF_sum[[x]]), function(y){
+    spia_consTF_sum[[x]][[y]] %>%
+      dplyr::filter(Sig) %>%
+      mutate(TF = str_split(x, "_")[[1]][1], 
+             condition = y) %>%
+      dplyr::select(TF, gs_name, condition, tA)
+  }, simplify = FALSE) %>%
+    bind_rows()
+}, simplify = FALSE) %>%
+    bind_rows() %>%
+  split(f = .$condition)
+```
+
+
+## SY5Y TFs
+
+The same method was applied onto SY5Y-specific TFs, while the only difference was that DE TFTs of the TFs belonged to E2F family and highly overlapped were merged into a "E2F_merge" group. 
+
+```{r sy5yTF_DE}
+sy5yTF_DE <- sapply(goseq_SY5Y, function(y){
+  sapply(str_subset(names(DE_genes), "SH"), function(x){
+    DE_genes[[x]] %>%
+      dplyr::filter(gene_name %in% tfByID[[y]]) %>%
+      left_join(grGenes %>%
+                  as.data.frame() %>%
+                  distinct(gene_id, .keep_all = TRUE) %>%
+                  dplyr::select(gene_id, gene_name))
+    
+  }, simplify = FALSE)
+}, simplify = FALSE)
+notCombine <- c("HSD17B8_TARGET_GENES", "MIER1_TARGET_GENES")
+temp_ls <- list()
+temp_ls[["E2F_merge"]] <- sapply(setdiff(goseq_SY5Y, notCombine), function(y){
+  sapply(names(sy5yTF_DE[[y]]), function(x){
+    sy5yTF_DE[[y]][[x]] %>%
+      mutate(condition = x)
+  }, simplify = FALSE) %>%
+    bind_rows()
+}, simplify = FALSE) %>%
+    bind_rows() %>%
+  split(f =.$condition)
+sy5yTF_DE <- c(temp_ls, 
+               sy5yTF_DE[notCombine])
+```
+
+```{r  spia_sy5yTF}
+# sy5yTF_expressed <- sapply(names(sy5yTF_DE), function(y){
+#   sapply(str_subset(names(DE_genes), "SH"), function(x){
+#     DE_genes[[x]] %>%
+#       dplyr::filter(gene_name %in% sy5yTF_DE[[y]][[x]]$gene_name) %>%
+#       left_join(entrezGenes) %>%
+#       drop_na() %>%
+#       mutate(entrez_gene = paste("ENTREZID:", entrez_gene, sep = "")) %>%
+#       dplyr::select(entrez_gene, aveFC, gene_name) %>%
+#       .[!duplicated(.$entrez_gene),]
+#   }, simplify = FALSE)
+# }, simplify = FALSE)
+# sy5yTF_expressed <- sapply(names(sy5yTF_expressed), function(y){
+#   sapply(names(sy5yTF_expressed[[y]]), function(x){
+#     sy5yTF_expressed[[y]][[x]] %>%
+#       extract2("aveFC") %>%
+#       set_names(sy5yTF_expressed[[y]][[x]]$entrez_gene)
+#   }, simplify = FALSE)
+# }, simplify = FALSE)
+# spia_sy5yTF <- sapply(names(sy5yTF_expressed), function(y){
+#   sapply(names(sy5yTF_expressed[[y]]), function(x){
+#     spia_my(de = sy5yTF_expressed[[y]][[x]], BminsI = BminsI)
+#   }, simplify = FALSE)
+# }, simplify = FALSE)
+# save(spia_sy5yTF, file = here::here("output/TF_KEGG/spia_sy5yTF.Rda"))
+load(here::here("output/TF_KEGG/spia_sy5yTF.Rda"))
+load(here::here("output/TF_KEGG/spia_sy5yTF_permut.Rda"))
+```
+
+```{r spia_sy5yTF_sum}
+spia_sy5yTF_sum <- sapply(names(spia_sy5yTF), function(x){
+  sapply(names(spia_sy5yTF_permut[[x]]), function(y){
+    spia_sy5yTF_permut[[x]][[y]] %>%
+      split(f = .$gs_name) %>%
+      lapply(dplyr::mutate, 
+             MAD = mad(tA), 
+             MEDIAN = median(tA)) %>%
+      lapply(dplyr::select,gs_name, MAD, 
+             MEDIAN) %>%
+      lapply(unique) %>%
+      bind_rows() %>%
+      dplyr::filter(MAD != 0) %>%
+      left_join(spia_sy5yTF[[x]][[y]]) %>%
+      mutate(
+        Z_mad = (tA - MEDIAN)/MAD) %>% 
+      mutate(
+        p_mad = 2*pnorm(-abs(Z_mad)),
+        bonf_mad = p.adjust(p_mad, method = "bonferroni"),
+        FDR_mad = p.adjust(p_mad, method = "fdr"),
+        Sig = ifelse(FDR_mad < 0.05, TRUE, FALSE)) %>%
+      .[order(.$FDR_mad),] %>%
+      mutate(Rank_spia = row_number()) 
+    # %>%
+    #     dplyr::filter(!Z_mad %in% c("-Inf", "Inf"))
+  }, simplify = FALSE) 
+}, simplify = FALSE)
+spia_sy5yTF_sig <- sapply(names(spia_sy5yTF_sum), function(x){
+  sapply(names(spia_sy5yTF_sum[[x]]), function(y){
+    spia_sy5yTF_sum[[x]][[y]] %>%
+      dplyr::filter(Sig) %>%
+      mutate(TF = str_split(x, "_")[[1]][1], 
+             condition = y) %>%
+      dplyr::select(TF, gs_name, condition, tA)
+  }, simplify = FALSE) %>%
+    bind_rows()
+}, simplify = FALSE) %>%
+    bind_rows() %>%
+  split(f = .$condition)
+```
+
+
+
+## Summary
+
+Significantly perturbed KEGG pathways and TFs regulating them were combined into regulatory pairs and intersections between pairs defined under each condition was visualized. 
+
+```{r spia_sum, fig.cap="*Intersection between TF-KEGG regulatory pairs that were significant in each condition: (red) all conditions, (blue) exclusively in SH-SY5Y cell lines*"}
+spia_sum <- c(spia_consTF_sum %>%
+                lapply(function(x){lapply(x, mutate, category = "Consistent")}), 
+              spia_sy5yTF_sum %>%
+                lapply(function(x){lapply(x, mutate, category = "SY5Y-specific")}))
+TF_KEGG <- sapply(names(spia_sum), function(x){
+  sapply(names(spia_sum[[x]]), function(y){
+    spia_sum[[x]][[y]] %>%
+      # dplyr::filter(gs_name %in%  spia_net_sig[[y]]) %>%
+      mutate(TF = str_split(x, "_")[[1]][1], 
+             condition = y, 
+             Regulation = ifelse(Z_mad < 0, "Inhibition", "Activation")) %>%
+      dplyr::select(TF, gs_name, condition, Z_mad, Sig,p_mad, FDR_mad)
+  }, simplify = FALSE) %>%
+    bind_rows()
+}, simplify = FALSE) %>%
+    bind_rows() %>%
+  split(f = .$condition)
+TF_KEGG %>%
+  lapply(dplyr::filter, Sig) %>%
+  lapply(mutate, pair = paste(TF, gs_name, sep = "-")) %>%
+  lapply(pull, pair) %>%
+  fromList() %>%
+  upset(sets = colnames(.), 
+        nintersects = NA, 
+        keep.order = TRUE, 
+         queries = list(
+        list(query = intersects,
+             params = list("HEK293_AZD8055","HEK293_Starvation", "SH-SY5Y_AZD8055", "SH-SY5Y_Starvation", "HeLa_AZD8055","HeLa_Starvation"),
+             color = "red",
+             active = T),
+        list(query = intersects,
+             params = list("SH-SY5Y_AZD8055", "SH-SY5Y_Starvation"),
+             color = "blue",
+             active = T)
+        )
+        )
+```
+
+10 pairs of regulatory relationships were significant under all conditions. 
+```{r tfKEGG4}
+tfKEGG10 <- TF_KEGG %>%
+  lapply(dplyr::filter, Sig) %>%
+  lapply(mutate, pair = paste(TF, gs_name, sep = "-")) %>%
+  lapply(pull, pair) %>%
+  Reduce(intersect,.)
+```
+
+
+```{r tfKEGG10_hp, fig.height= 6, fig.width= 12, fig.cap="TF-KEGG regulatory pairs that were significant in all conditions*"}
+temp <- TF_KEGG %>%
+  lapply(mutate, pair = paste(TF, gs_name, sep = "-")) %>%
+  lapply(dplyr::filter, pair %in% tfKEGG10) %>%
+  bind_rows() %>%
+  mutate(
+    Z_mad = round(Z_mad, 2),
+    Z_label = ifelse(Sig, paste(Z_mad, "*", sep = ""), Z_mad),
+    neg_extreme = ifelse(Z_mad < -10, TRUE, FALSE), 
+    pos_extreme = ifelse(Z_mad > 10, TRUE, FALSE), 
+    Z_label = ifelse(pos_extreme, ">10", Z_label),
+    )
+temp %>%
+  ggplot(aes(condition, pair, fill = Z_mad)) +
+  geom_tile(data = .%>%
+              dplyr::filter(!neg_extreme, !pos_extreme),
+            aes(fill = Z_mad), fontsize =3) +
+  scale_fill_distiller(palette = "RdYlBu", 
+                      limit = c(-10, 10),
+                       name = "Normalised Perturbation Score"
+                       ) +
+  geom_tile(data = .%>%
+              dplyr::filter(pos_extreme),
+            fill = "firebrick", fontsize =3) +
+  geom_text(aes(label = Z_label)) +
+  theme(
+    axis.title=element_blank(),
+    panel.grid = element_blank(),
+    # axis.ticks = element_blank(),
+    legend.title = element_text(size= 8),
+    legend.key.size = unit(3, 'mm'),
+    axis.text = element_text(size = 13)
+  ) +
+  ggtitle("TF-KEGG regulatory pairs conserverd across all conditions")
+```
+
+```{r fig.height= 6 , fig.width= 7,  fig.cap="Network plot of TF-KEGG regulatory pairs that were significant in all conditions*"}
+temp <- TF_KEGG %>%
+  lapply(mutate, pair = paste(TF, gs_name, sep = "-")) %>%
+  lapply(dplyr::filter, pair %in% tfKEGG10) %>%
+  bind_rows() %>%
+  dplyr::select(TF, gs_name, Z_mad) %>%
+  group_by(TF, gs_name) %>%
+  summarise(Mean_mad = mean(Z_mad)) %>%
+  mutate(color = ifelse(Mean_mad > 0 ,"firebrick", "midnightblue"),
+         type = TF, 
+         gs_name = str_replace_all(gs_name, " ", "\n") %>%
+           str_to_title(), 
+         gs_name = ifelse(gs_name == "Pi3k-Akt\nSignaling\nPathway", "PI3K-AKT\nSignaling\nPathway", gs_name)) %>%
+  dplyr::rename(from = TF, 
+                to = gs_name) 
+g <- temp %>%
+  .[,c("from", "to", "color", "Mean_mad")] %>%
+  graph.data.frame()
+TFtoGS <- temp %>%
+  #dplyr::select(gs_name, gene_name) %>%
+    split(f = .$from)
+n <- length(TFtoGS)
+totV <- length(V(g))
+V(g)$type <- "kegg"
+V(g)$type[1:n] <- "TF"
+ g %>%
+  ggraph(layout = "lgl") +
+  geom_edge_arc(alpha = 0.9,
+                color = "tomato3", 
+                show.legend = FALSE,
+                strength = 0.4, 
+                linemitre = 5, 
+                width = 2.3,
+                arrow = arrow(type = "closed", length = unit(3, 'mm'))
+                ) +
+  geom_node_point(
+    fill = "lightyellow1",
+    data = . %>% dplyr::filter(type == "TF"),
+    size = 5,
+    shape = 21,
+    repel = TRUE,
+    stroke = 0.5,
+    show.legend = FALSE
+  ) + 
+  geom_node_label(
+    aes_(label = ~name
+         ),
+    fill = "lightyellow1",
+    data = . %>% dplyr::filter(type == "TF"),
+    repel = TRUE,
+    size = 7,
+    force = 0.2,
+    label.padding = unit(0.8, "lines"), 
+    label.size = 0,
+    label.r = 0.3,
+    show.legend = FALSE
+  ) +
+  geom_node_point(
+    fill = "lightblue",
+    data = . %>% dplyr::filter(type == "kegg"),
+    shape = 21,
+    size = 8,
+    stroke = 0.5,
+    repel = TRUE,
+    show.legend = FALSE,
+    alpha = 0.7, 
+  ) +
+  geom_node_text(
+    aes(label = name),
+    fill = "lightblue",
+    size = 6,
+    data = . %>% dplyr::filter(type == "kegg"),
+    repel = TRUE
+  ) +
+  theme(panel.border = element_blank(), 
+         panel.background = element_rect(fill = "transparent"), # bg of the panel
+  plot.background = element_rect(fill = "transparent", color = NA)
+  )
+```
+
+
+From the upset plot, it's found that 32 regulatory relationship were exclusive to SY5Y under both treatments. Those were extracted. 
+
+```{r tf-keggSH, fig.width=12, fig.height=8}
+pairToExtract <- TF_KEGG[str_subset(names(TF_KEGG), "SH")] %>%
+  lapply(dplyr::filter, Sig) %>%
+  lapply(dplyr::select, TF, gs_name) %>%
+  Reduce(inner_join,.) %>%
+  mutate(pair = paste(TF, gs_name, sep = "-")) %>%
+  pull(pair) %>%
+  setdiff(.,TF_KEGG[str_subset(names(TF_KEGG), "SH", negate = TRUE)] %>%
+            lapply(dplyr::filter, Sig) %>%
+            lapply(dplyr::select, TF, gs_name) %>%
+            Reduce(full_join,.) %>%
+            mutate(pair = paste(TF, gs_name, sep = "-")) %>%
+            pull(pair)
+  )  
+temp2 <- TF_KEGG[str_subset(names(TF_KEGG), "SH")] %>%
+  lapply(mutate, pair = paste(TF, gs_name, sep = "-")) %>%
+  lapply(dplyr::filter, pair %in% pairToExtract) %>%
+  bind_rows() %>%
+  mutate(
+    Z_mad = round(Z_mad, 2),
+    Z_label = ifelse(Sig, paste(Z_mad, "*", sep = ""), Z_mad),
+    neg_extreme = ifelse(Z_mad < -16, TRUE, FALSE), 
+    Z_label = ifelse(neg_extreme, "<16", Z_label),
+    )
+temp2 %>%
+  bind_rows() %>%
+  ggplot(aes(condition, pair, fill = Z_mad)) +
+  geom_tile(data = . %>% dplyr::filter(!neg_extreme),
+            aes(fill = Z_mad), fontsize =3) +
+  scale_fill_distiller(palette = "RdYlBu", 
+                      limit = c(-15, 15),
+                       name = "Normalised Perturbation Score"
+                       ) +
+  geom_tile(data = .%>%
+              dplyr::filter(neg_extreme),
+            fill = "royalblue3", fontsize =3) +
+  geom_text(aes(label = Z_label)) +
+  theme(
+    axis.title=element_blank(),
+    panel.grid = element_blank(),
+    # axis.ticks = element_blank(),
+    legend.title = element_text(size= 8),
+    legend.key.size = unit(3, 'mm'),
+    #   axis.text.y = element_text(colour = col)
+  )  +
+  ggtitle("TF-KEGG regulatory pairs unique to SY5Y cell line")
+
+```

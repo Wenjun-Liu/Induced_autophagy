@@ -1,0 +1,1016 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+
+
+<meta name="date" content="2022-03-20" />
+
+<title>Pathway_analysis(KEGG)</title>
+
+<script src="site_libs/header-attrs-2.13/header-attrs.js"></script>
+<script src="site_libs/jquery-3.6.0/jquery-3.6.0.min.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link href="site_libs/bootstrap-3.3.5/css/bootstrap.min.css" rel="stylesheet" />
+<script src="site_libs/bootstrap-3.3.5/js/bootstrap.min.js"></script>
+<script src="site_libs/bootstrap-3.3.5/shim/html5shiv.min.js"></script>
+<script src="site_libs/bootstrap-3.3.5/shim/respond.min.js"></script>
+<style>h1 {font-size: 34px;}
+       h1.title {font-size: 38px;}
+       h2 {font-size: 30px;}
+       h3 {font-size: 24px;}
+       h4 {font-size: 18px;}
+       h5 {font-size: 16px;}
+       h6 {font-size: 12px;}
+       code {color: inherit; background-color: rgba(0, 0, 0, 0.04);}
+       pre:not([class]) { background-color: white }</style>
+<script src="site_libs/navigation-1.1/tabsets.js"></script>
+<link href="site_libs/highlightjs-9.12.0/default.css" rel="stylesheet" />
+<script src="site_libs/highlightjs-9.12.0/highlight.js"></script>
+
+<style type="text/css">
+  code{white-space: pre-wrap;}
+  span.smallcaps{font-variant: small-caps;}
+  span.underline{text-decoration: underline;}
+  div.column{display: inline-block; vertical-align: top; width: 50%;}
+  div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+  ul.task-list{list-style: none;}
+    </style>
+
+<style type="text/css">code{white-space: pre;}</style>
+<script type="text/javascript">
+if (window.hljs) {
+  hljs.configure({languages: []});
+  hljs.initHighlightingOnLoad();
+  if (document.readyState && document.readyState === "complete") {
+    window.setTimeout(function() { hljs.initHighlighting(); }, 0);
+  }
+}
+</script>
+
+
+
+
+
+
+
+
+
+<style type = "text/css">
+.main-container {
+  max-width: 940px;
+  margin-left: auto;
+  margin-right: auto;
+}
+img {
+  max-width:100%;
+}
+.tabbed-pane {
+  padding-top: 12px;
+}
+.html-widget {
+  margin-bottom: 20px;
+}
+button.code-folding-btn:focus {
+  outline: none;
+}
+summary {
+  display: list-item;
+}
+details > summary > p:only-child {
+  display: inline;
+}
+pre code {
+  padding: 0;
+}
+</style>
+
+
+
+<!-- tabsets -->
+
+<style type="text/css">
+.tabset-dropdown > .nav-tabs {
+  display: inline-table;
+  max-height: 500px;
+  min-height: 44px;
+  overflow-y: auto;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.tabset-dropdown > .nav-tabs > li.active:before {
+  content: "";
+  font-family: 'Glyphicons Halflings';
+  display: inline-block;
+  padding: 10px;
+  border-right: 1px solid #ddd;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li.active:before {
+  content: "&#xe258;";
+  border: none;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open:before {
+  content: "";
+  font-family: 'Glyphicons Halflings';
+  display: inline-block;
+  padding: 10px;
+  border-right: 1px solid #ddd;
+}
+
+.tabset-dropdown > .nav-tabs > li.active {
+  display: block;
+}
+
+.tabset-dropdown > .nav-tabs > li > a,
+.tabset-dropdown > .nav-tabs > li > a:focus,
+.tabset-dropdown > .nav-tabs > li > a:hover {
+  border: none;
+  display: inline-block;
+  border-radius: 4px;
+  background-color: transparent;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li {
+  display: block;
+  float: none;
+}
+
+.tabset-dropdown > .nav-tabs > li {
+  display: none;
+}
+</style>
+
+<!-- code folding -->
+
+
+
+
+</head>
+
+<body>
+
+
+<div class="container-fluid main-container">
+
+
+
+
+<div id="header">
+
+
+
+<h1 class="title toc-ignore">Pathway_analysis(KEGG)</h1>
+<h4 class="date">2022-03-20</h4>
+
+</div>
+
+
+<p>#Set libaries</p>
+<pre class="r"><code>library(ngsReports)
+library(tidyverse)
+library(magrittr)
+library(edgeR)
+library(AnnotationHub)
+library(ensembldb)
+library(scales)
+library(pander)
+library(cqn)
+library(ggrepel)
+library(pheatmap)
+library(RColorBrewer)
+library(corrplot)
+library(UpSetR)
+library(cowplot)
+library(msigdbr)
+library(GO.db)
+library(goseq)
+library(kableExtra)
+library(plotly)
+library(reshape2)
+library(DT)
+library(ComplexHeatmap)
+library(viridis)
+library(igraph)
+library(ggraph)
+library(textworks)</code></pre>
+<pre class="r"><code>ah &lt;- AnnotationHub() %&gt;%
+    subset(species == &quot;Homo sapiens&quot;) %&gt;%
+    subset(rdataclass == &quot;EnsDb&quot;)
+ensDB &lt;- ah[[&quot;AH75011&quot;]]
+grTrans &lt;- transcripts(ensDB)
+trLengths &lt;- exonsBy(ensDB, &quot;tx&quot;) %&gt;%
+    width() %&gt;%
+    vapply(sum, integer(1))
+mcols(grTrans)$length &lt;- trLengths[names(grTrans)]
+gcGene &lt;- grTrans %&gt;%
+  mcols() %&gt;%
+  as.data.frame() %&gt;%
+  dplyr::select(gene_id, tx_id, gc_content, length) %&gt;%
+  as_tibble() %&gt;%
+  group_by(gene_id) %&gt;%
+  summarise(
+    gc_content = sum(gc_content*length) / sum(length),
+    length = ceiling(median(length))
+  )
+grGenes &lt;- genes(ensDB)
+mcols(grGenes) %&lt;&gt;%
+  as.data.frame() %&gt;%
+  left_join(gcGene) %&gt;%
+  as.data.frame() %&gt;%
+  DataFrame()</code></pre>
+<p>Raw read counts were read in and an overall <code>DGElist</code>
+object was created.</p>
+<pre class="r"><code>filename &lt;- here::here(&quot;data&quot;, &quot;filename.txt&quot;) %&gt;%
+  read.table(header = TRUE, sep = &quot;\t&quot;,stringsAsFactors = FALSE) %&gt;% 
+  as_tibble()%&gt;%
+  mutate_at(vars(one_of(c(&quot;CELL&quot;, &quot;TREAT&quot;,&quot;CONTR&quot;, &quot;TIME&quot;))), as.factor) %&gt;%
+  mutate(TREATED = ifelse(CONTR == 0,1,0))
+dgeList &lt;- here::here(&quot;data&quot;, &quot;2_alignedData&quot;, &quot;featureCounts&quot;, &quot;genes.out&quot;) %&gt;%
+  read_delim(delim = &quot;\t&quot;) %&gt;%
+  set_names(basename(names(.))) %&gt;%
+  as.data.frame() %&gt;%
+  column_to_rownames(&quot;Geneid&quot;) %&gt;%
+  as.matrix() %&gt;% 
+  set_colnames(str_remove(colnames(.), &quot;Aligned.sortedByCoord.out.bam&quot;)) %&gt;%
+  DGEList(
+    samples = tibble(sample = colnames(.)) %&gt;%
+      left_join(dplyr::filter(filename, read == &quot;R1&quot;)),
+    genes = grGenes[rownames(.)] %&gt;%
+      as.data.frame() %&gt;%
+      dplyr::select(
+        chromosome = seqnames, start, end, 
+        gene_id, gene_name, gene_biotype, description, 
+        entrezid, gc_content, length
+      )
+  ) %&gt;%
+  .[!grepl(&quot;rRNA&quot;, .$genes$gene_biotype),] %&gt;%
+  calcNormFactors()
+entrezGenes &lt;- dgeList$genes %&gt;%
+  unnest(entrezid) %&gt;%
+  dplyr::rename(entrez_gene = entrezid)</code></pre>
+<div id="retrieve-kegg-pathways" class="section level1">
+<h1>Retrieve KEGG pathways</h1>
+<p>Significant regulation of KEGG pathways were then determined by
+combining evidence derived from modified SPIA and goseq. SPIA is a
+pathway perturbation testing strategy that takes pathway topologies in
+consideration, while <code>goseq</code> is an enrichment testing
+strategy.</p>
+<p>312 KEGG pathways and their encoded topologise were extracted using
+<code>graphite</code></p>
+<pre class="r"><code># kegg &lt;- pathways(&quot;hsapiens&quot;, &quot;kegg&quot;)
+# kegg &lt;- convertIdentifiers(kegg, &quot;ENTREZID&quot;)
+# prepareSPIA(kegg, &quot;keggEx&quot;)
+# kgToGene &lt;- sapply(seq_len(length(kegg)), function(x){
+#   kegg[[x]] %&gt;%
+#     nodes() %&gt;%
+#     as.data.frame() %&gt;%
+#   set_colnames(&quot;entrez_gene&quot;) %&gt;%
+#   mutate(entrez_gene = gsub(&quot;ENTREZID:&quot;, &quot;&quot;, entrez_gene),
+#          entrez_gene = as.integer(entrez_gene),
+#     gs_name = pathwayTitle(kegg[[x]])) %&gt;%
+#   left_join(entrezGenes %&gt;%
+#               dplyr::select(gene_name, entrez_gene)) %&gt;%
+#     dplyr::select(-&quot;entrez_gene&quot;)
+# }, simplify = FALSE)  %&gt;%
+#   bind_rows() %&gt;%
+#   drop_na()
+# save(kgToGene, file = here::here(&quot;output/kgToGene.rds&quot;))
+load(here::here(&quot;output/kgToGene.rds&quot;))
+all &lt;- entrezGenes %&gt;%
+  dplyr::filter(!is.na(entrez_gene)) %&gt;%
+  mutate(entrez_gene = paste(&quot;ENTREZID:&quot;, entrez_gene, sep = &quot;&quot;)) %&gt;%
+  extract2(&quot;entrez_gene&quot;)</code></pre>
+<pre class="r"><code>kg &lt;- kgToGene %&gt;%
+  left_join(grGenes %&gt;%
+              as.data.frame() %&gt;%
+              distinct(gene_id, .keep_all = TRUE) %&gt;%
+              dplyr::select(gene_id, gene_name))
+kgByGene &lt;- kg %&gt;%
+  split(f = .$gene_id) %&gt;%
+  lapply(pull, gs_name)</code></pre>
+</div>
+<div id="over-representation-using-goseq" class="section level1">
+<h1>Over-representation using <code>goseq</code></h1>
+<p>KEGG pathways with FDR &lt; 0.05 in <code>goseq</code> output were
+defined to be significantly over-represented.</p>
+<pre class="r"><code># lenPwf_DE &lt;- sapply(names(DE_genes), function(x){
+#   grTrans %&gt;%
+#     as.data.frame() %&gt;%
+#     distinct(gene_id, .keep_all = TRUE) %&gt;%
+#     dplyr::select(gene_id, length) %&gt;%
+#     mutate(Status = case_when(gene_id %in% DE_genes[[x]]$gene_id  ~ 1, !gene_id %in% DE_genes[[x]]$gene_id   ~ 0)) %&gt;%
+#     with(
+#       nullp(
+#         DEgenes = structure(
+#           Status, names = gene_id
+#         ),
+#         genome = &quot;GRCh38.p16&quot;,
+#         id = &quot;ensGene&quot;,
+#         bias.data =length,
+#         plot.fit = FALSE
+#       )
+#     )
+# }, simplify = FALSE)
+# goseq_kegg &lt;- sapply(names(lenPwf_DE), function(x){
+#   goseq(lenPwf_DE[[x]],
+#         gene2cat = kg) %&gt;%
+#     as_tibble %&gt;%
+#     dplyr::filter(numDEInCat &gt; 0) %&gt;%
+#     mutate(
+#       adjP = p.adjust(over_represented_pvalue, method = &quot;bonf&quot;),
+#       FDR = as.numeric(p.adjust(over_represented_pvalue, method = &quot;fdr&quot;))
+#     ) %&gt;%
+#     dplyr::select(-contains(&quot;under&quot;)) %&gt;%
+#     dplyr::rename(
+#       gs_name = category,
+#       PValue = over_represented_pvalue,
+#       nDE = numDEInCat,
+#       nExpressed = numInCat
+#     ) %&gt;%
+#     left_join(kg) %&gt;%
+#     dplyr::select(
+#       gs_name, nExpressed, nDE,
+#       contains(&quot;P&quot;, ignore.case = FALSE),
+#       FDR,
+#       gene_name, gene_id
+#     ) %&gt;%
+#     dplyr::filter(
+#       gene_id %in% DE_genes[[x]]$gene_id
+#     ) %&gt;%
+#     chop(c(&quot;gene_name&quot;, &quot;gene_id&quot;)) %&gt;%
+#     mutate(
+#       gene_name = vapply(.$gene_name, function(x){
+#         paste(x,collapse = &quot;;&quot;)
+#       }, character(1)),
+#       gene_id = vapply(.$gene_id, function(x){
+#         paste(x,collapse = &quot;;&quot;)
+#       }, character(1))
+#     ) %&gt;%
+#     mutate_at(
+#       vars(one_of(c(&quot;PValue&quot;, &quot;adjP&quot;, &quot;FDR&quot;))),
+#       formatP
+#     )
+# }, simplify = FALSE)
+# names(goseq_kegg) &lt;- c(&quot;HEK293_AZD8055&quot;, &quot;HEK293_Starvation&quot;,&quot;SH-SY5Y_AZD8055&quot;, &quot;SH-SY5Y_Starvation&quot;, &quot;HeLa_AZD8055&quot;,
+#                   &quot;HeLa_Starvation&quot;)
+# saveRDS(goseq_kegg, file = here::here(&quot;output/goseq_kegg.rds&quot;))
+goseq_kegg &lt;- readRDS(here::here(&quot;output/goseq_kegg.rds&quot;))
+goseq_kegg_sig &lt;- goseq_kegg %&gt;%
+lapply(dplyr::filter, FDR &lt; 0.05)</code></pre>
+<div id="summary" class="section level3">
+<h3>Summary</h3>
+<p>Overlap between enriched KEGG pathways defined under each condition
+was visualized through the upset plot.</p>
+<pre class="r"><code>goseq_kegg %&gt;%
+  lapply(dplyr::filter, FDR &lt; 0.05) %&gt;%
+  lapply(pull, gs_name) %&gt;%
+  fromList() %&gt;%
+  upset(sets = colnames(.), 
+        nintersects = NA, 
+        keep.order = TRUE, 
+        queries = list(
+          list(query = intersects, 
+             params = list(&quot;HEK293_AZD8055&quot;, &quot;HeLa_AZD8055&quot;, 
+                           &quot;HeLa_Starvation&quot;, &quot;SH-SY5Y_AZD8055&quot;),
+             color = &quot;red&quot;,
+             active = T),
+          list(query = intersects, 
+             params = list(&quot;HeLa_AZD8055&quot;, 
+                           &quot;HeLa_Starvation&quot;, &quot;SH-SY5Y_AZD8055&quot;,&quot;SH-SY5Y_Starvation&quot;),
+             color = &quot;red&quot;,
+             active = T),
+        list(query = intersects, 
+             params = list(&quot;HEK293_AZD8055&quot;,&quot;HEK293_Starvation&quot;, &quot;HeLa_AZD8055&quot;, 
+                           &quot;HeLa_Starvation&quot;),
+             color = &quot;red&quot;,
+             active = T),
+        list(query = intersects,
+             params = list( &quot;SH-SY5Y_Starvation&quot;, &quot;SH-SY5Y_AZD8055&quot;),
+             color = &quot;blue&quot;,
+             active = T)
+        )
+  )</code></pre>
+<div class="figure">
+<img src="Pathway_analysis-KEGG-_files/figure-html/goseq_kegg_sig-1.png" alt="*Overlap between KEGG pathways defined to be over-represented under each condition.There wasn't any KEGG pathways that were over-represented in all conditions but there were 4 that were OR in 4 conditions (colored red) and 1 pathway that was unique to SY5Y cell line (colored blue).*" width="672" />
+<p class="caption">
+<em>Overlap between KEGG pathways defined to be over-represented under
+each condition.There wasn’t any KEGG pathways that were over-represented
+in all conditions but there were 4 that were OR in 4 conditions (colored
+red) and 1 pathway that was unique to SY5Y cell line (colored
+blue).</em>
+</p>
+</div>
+<pre class="r"><code>orKEGG_4 &lt;- goseq_kegg %&gt;%
+  lapply(dplyr::filter, FDR &lt; 0.05) %&gt;%
+  bind_rows() %&gt;%
+  group_by(gs_name) %&gt;%
+  filter(n() == 4) %&gt;%
+  pull(gs_name) %&gt;%
+  unique()
+orKEGG_1 &lt;- goseq_kegg[str_subset(names(goseq_kegg), &quot;SH&quot;)] %&gt;%
+  lapply(dplyr::filter, FDR &lt; 0.05) %&gt;%
+  lapply(pull, gs_name) %&gt;%
+  Reduce(intersect,.) %&gt;%
+  setdiff(., goseq_kegg[str_subset(names(goseq_kegg), &quot;SH&quot;, negate = TRUE)] %&gt;%
+            lapply(dplyr::filter, FDR &lt; 0.05) %&gt;%
+            lapply(pull, gs_name) %&gt;%
+            unname() %&gt;%
+            unlist())
+temp1 &lt;- sapply(names(goseq_kegg), function(x){
+  goseq_kegg[[x]] %&gt;%
+    dplyr::filter(gs_name %in% orKEGG_4, 
+                  FDR &lt; 0.05) %&gt;%
+    mutate(Condition = x, 
+           PValue = -log10(PValue)) %&gt;%
+    dplyr::select(gs_name, PValue , Condition)
+}, simplify = FALSE)
+hp1 &lt;- temp1 %&gt;%
+  bind_rows() %&gt;%
+  # rbind(data.frame(gs_name = orKEGG_4, PValue = NA, Condition = &quot;HeLa_Starvation&quot;)) %&gt;%
+  ggplot(aes(factor(Condition, levels = names(goseq_kegg)), 
+             gs_name, fill = PValue)) +
+  geom_tile(aes(fill = PValue), fontsize =3) +
+  scale_fill_viridis(option = &quot;magma&quot;, 
+                     name = &quot;-log10(P value)&quot;) +
+  theme(
+    axis.title=element_blank(),
+    panel.grid = element_blank(),
+    # axis.ticks = element_blank(),
+    legend.title = element_text(size= 8),
+    legend.key.size = unit(3, &#39;mm&#39;),
+    axis.text.x = element_text(angle = 45,hjust=1)
+    #   axis.text.y = element_text(colour = col)
+  ) +
+  ggtitle(&quot;Over-represented in at least 4 conditions&quot;)
+temp2 &lt;- sapply(str_subset(names(goseq_kegg), &quot;SH&quot;), function(x){
+  goseq_kegg[[x]] %&gt;%
+    dplyr::filter(gs_name %in% orKEGG_1, 
+                  FDR &lt; 0.05) %&gt;%
+    mutate(Condition = x, 
+           PValue = -log10(PValue)) %&gt;%
+    dplyr::select(gs_name, PValue, Condition)
+}, simplify = FALSE)
+hp2 &lt;- temp2 %&gt;%
+  bind_rows() %&gt;%
+  replace(is.na(.),0) %&gt;%
+  ggplot(aes(Condition, 
+             gs_name, fill = PValue)) +
+  geom_tile(aes(fill = PValue), fontsize =3) +
+  scale_fill_viridis(option = &quot;magma&quot;, 
+                     name = &quot;-log10(P value)&quot;) +
+  theme(
+    axis.title=element_blank(),
+    panel.grid = element_blank(),
+    # axis.ticks = element_blank(),
+    legend.title = element_text(size= 8),
+    legend.key.size = unit(3, &#39;mm&#39;),
+    axis.text.x = element_text(angle = 45,hjust=1)
+    # axis.text.x = element_text(angle = 45, hjust=1)
+    #   axis.text.y = element_text(colour = col)
+  ) +
+  ggtitle(&quot;Over-represented only in SY5Y&quot;)
+# pdf(file = &quot;/Users/wenjunliu/RNA_seq_autophagicflux/Manuscript/Figure/newest/summary_KEGG_OR(2hp).pdf&quot;,
+#     width = 10,
+#     height = 5)
+plot_grid(hp1, hp2, 
+          ncol = 2, 
+          rel_heights = c(3,1), 
+          scale = c(1, 0.5),
+          labels = c(&quot;a&quot;, &quot;b&quot;))</code></pre>
+<div class="figure">
+<img src="Pathway_analysis-KEGG-_files/figure-html/orKEGG_2hp-1.png" alt="-log10(Pvalue) of KEGG pathways enriched (a) in 4 conditions (b) only in SY5Y cell line*" width="1152" />
+<p class="caption">
+-log10(Pvalue) of KEGG pathways enriched (a) in 4 conditions (b) only in
+SY5Y cell line*
+</p>
+</div>
+<pre class="r"><code># dev.off()</code></pre>
+<p>ALl KEGG pathways that were over-represented in at least one
+condition were extracted and their FDR were visualised.</p>
+<pre class="r"><code>allKEGGor &lt;- goseq_kegg %&gt;%
+  lapply(dplyr::filter, FDR &lt; 0.05) %&gt;%
+  bind_rows() %&gt;%
+  pull(gs_name) %&gt;%
+  unique()
+allKEGGor &lt;- setdiff(allKEGGor, &quot;Metabolic pathways&quot;)
+temp &lt;- sapply(names(goseq_kegg), function(x){
+  goseq_kegg[[x]] %&gt;%
+    dplyr::filter(gs_name %in% allKEGGor) %&gt;%
+    replace(is.na(.),0) %&gt;%
+     mutate(Condition = x, 
+           logFDR = -log10(FDR), 
+           Sig = ifelse(FDR &lt; 0.05, TRUE, FALSE),
+           roundedFDR = paste(round(FDR,3)*100, &quot;%&quot;, sep = &quot;&quot;),
+           roundedFDR = ifelse(roundedFDR == &quot;0%&quot;, &quot;&lt;0.1%&quot;, roundedFDR), 
+           roundedFDR = ifelse(FDR &lt; 0.05, paste(roundedFDR, &quot;*&quot;, sep = &quot;&quot;), roundedFDR)) %&gt;%
+    dplyr::select(gs_name,logFDR, Condition, roundedFDR, Sig)
+}, simplify = FALSE) %&gt;%
+  bind_rows()
+allKEGGor_hcl &lt;- temp %&gt;%
+  dplyr::select(gs_name, logFDR, Condition) %&gt;%
+  pivot_wider(names_from = Condition, values_from = logFDR) %&gt;%
+  replace(is.na(.),0) %&gt;%
+  column_to_rownames(&quot;gs_name&quot;) %&gt;%
+  dist() %&gt;%
+  hclust() 
+temp %&gt;%
+  ggplot(aes(factor(gs_name, levels = allKEGGor_hcl$labels[allKEGGor_hcl$order]), Condition)) +
+  geom_tile(aes(fill = logFDR)) +
+  geom_text(data = . %&gt;% dplyr::filter(!Sig), 
+            aes(label = roundedFDR), size = 4, color = &quot;azure4&quot;) +
+  geom_text(data = . %&gt;% dplyr::filter(Sig), 
+            aes(label = roundedFDR), size = 4, color = &quot;black&quot;) +
+  scale_fill_viridis(option = &quot;magma&quot;, 
+                     name = &quot;-log10(P value)&quot;) +
+  theme(
+    axis.title=element_blank(),
+    panel.grid = element_blank(),
+    # axis.ticks = element_blank(),
+    legend.title = element_text(size= 12),
+    legend.key.size = unit(3, &#39;mm&#39;),
+    axis.text.x = element_text(angle = 45, hjust=1, size = 12), 
+    axis.text.y = element_text(size= 12)
+    #   axis.text.y = element_text(colour = col)
+  ) +
+  panel_border(remove = TRUE) +
+  coord_fixed(ratio= 1.8)</code></pre>
+<p><img src="Pathway_analysis-KEGG-_files/figure-html/keggOR_hp-1.png" width="1536" /></p>
+</div>
+</div>
+<div id="perturbation-testing" class="section level1">
+<h1>Perturbation testing</h1>
+<p>The observed peturbation scores of KEGG pathways under each condition
+were firstly derived using algorithm adapted from <a
+href="https://www.ncbi.nlm.nih.gov/pmc/articles/PMC2732297/"><code>SPIA</code></a>.</p>
+<pre class="r"><code># load(&quot;/Users/wenjunliu/Induced_autophagy/output/BminsI.Rda&quot;)
+# merge_DE_spia &lt;- sapply(names(DE_fc), function(x){
+#   DE_fc[[x]] %&gt;%
+#     left_join(entrezGenes) %&gt;%
+#     dplyr::select(aveFC, entrez_gene) %&gt;%
+#     unique() %&gt;%
+#     drop_na() %&gt;%
+#     mutate(entrez_gene = paste(&quot;ENTREZID:&quot;, entrez_gene, sep = &quot;&quot;))
+# }, simplify = FALSE)
+# merge_DE_spia &lt;- sapply(names(merge_DE_spia), function(x){
+#   merge_DE_spia[[x]] %&gt;%
+#     extract2(&quot;aveFC&quot;) %&gt;%
+#     set_names(merge_DE_spia[[x]]$entrez_gene)
+# }, simplify = FALSE)
+# spia_netPer &lt;- sapply(names(merge_DE_spia), function(x){
+#   spia_my(de = merge_DE_spia[[x]], BminsI = BminsI)
+# }, simplify = FALSE)
+# save(spia_netPer, file = here::here(&quot;output/spia_netPer.Rda&quot;))
+load(here::here(&quot;output/spia_netPer.Rda&quot;))</code></pre>
+<p>The original <code>SPIA</code> paper uses a gene-labels permutation
+based method to test significances of test perturbation scores, which
+makes an unrelistic assumption of gene-gene independence.</p>
+<p>To overcome this problem, we proposed a sample label permutation
+approach. In each round of permutation, sample labels are randomly
+shuffled and the same DE analysis workflow is undertaken, leading to
+permuted DEGs and their permuted logFCs. Those are then used as input
+for the pathway perturbation testing algorithm.</p>
+<p>1000 permutations are performed to obtain the null distribution of
+perturbation scores for each pathway.</p>
+<p>To get ready for permutation, DGELists were split by cells,
+undetectable genes were removed and cqn was applied to add offset terms
+just like how DE analyses were performed before.</p>
+<p>DGELists were then further split to 6 conditions (cell_treat), and
+only the baseline control and 15 and 30 hrs treated were kept.</p>
+<pre class="r"><code># metaByCell &lt;- sapply(c(&quot;HeLa.tfLC3&quot;, &quot;SH-SY5Y.tfLC3&quot;,&quot;HEK293.tfLC3&quot;), function(x){
+#   metadata %&gt;%
+#     dplyr::filter(CELL == x)
+# }, simplify = FALSE) %&gt;%
+#   lapply(mutate, group = paste(TREAT, TIME, sep = &quot;_&quot;))
+# sampleByCell &lt;- sapply(names(metaByCell), function(x){
+#   grepl(paste(unique(metaByCell[[x]]$sample), collapse=&quot;|&quot;),dgeList$samples$sample)
+# }, simplify = FALSE)
+# dgeList_byCell &lt;- sapply(names(metaByCell), function(x){
+#   dgeList[,sampleByCell[[x]]] %&gt;%
+#     .[rowSums(cpm(.) &gt;= minCPM) &gt;= minSamples,]
+# }, simplify = FALSE)
+# cqn_byCell &lt;- sapply(names(dgeList_byCell), function(x){
+#   cqn(
+#     counts = dgeList_byCell[[x]]$counts,
+#     x = dgeList_byCell[[x]]$genes$gc_content,
+#     lengths = dgeList_byCell[[x]]$genes$length,
+#     sizeFactors = dgeList_byCell[[x]]$samples$lib.size
+#   )
+# }, simplify = FALSE)
+# set_offset &lt;- function(dgelist, offset){
+#   dgelist$offset &lt;- offset
+#   dgelist
+# }
+# dgeList_byCell &lt;- sapply(names(dgeList_byCell), function(x){
+#   set_offset(dgeList_byCell[[x]],cqn_byCell[[x]]$glm.offset)
+# }, simplify = FALSE)
+# ```
+# 
+# ```{r dgeByTreat}
+# dgeList_AZD &lt;- sapply(names(metaByCell), function(x){
+#   sampleToKepp &lt;- grepl(paste(dplyr::filter(metaByCell[[x]], group %in% c(&quot;AZD8055_15&quot;, &quot;AZD8055_30&quot;,&quot;DMSO_0&quot;))$sample, collapse=&quot;|&quot;),dgeList_byCell[[x]]$samples$sample)
+#   dgeList_byCell[[x]][,sampleToKepp]
+# }, simplify = FALSE)
+# names(dgeList_AZD) &lt;- vapply(names(dgeList_AZD), function(x){
+#   paste(str_remove(x, &quot;.tfLC3&quot;), &quot;AZD&quot;, sep = &quot;_&quot;)
+# }, character(1))
+# # write_rds(
+# #   x = dgeList_AZD,
+# #   path = here::here(&quot;data/dgeList_AZD.rds&quot;),
+# #   compress = &quot;gz&quot;
+# # )
+# dgeList_EBSS &lt;- sapply(names(metaByCell), function(x){
+#     sampleToKepp &lt;- grepl(paste(dplyr::filter(metaByCell[[x]], group %in% c(&quot;EBSS_15&quot;, &quot;EBSS_30&quot;,&quot;DMEM_0&quot;))$sample, collapse=&quot;|&quot;),dgeList_byCell[[x]]$samples$sample)
+#   dgeList_byCell[[x]][,sampleToKepp]
+# }, simplify = FALSE)
+# names(dgeList_EBSS) &lt;- vapply(names(dgeList_EBSS), function(x){
+#   paste(str_remove(x, &quot;.tfLC3&quot;), &quot;EBSS&quot;, sep = &quot;_&quot;)
+# }, character(1))
+# dgeByCon &lt;- c(dgeList_AZD, dgeList_EBSS)
+# dgeByCon &lt;- sapply(names(dgeByCon), function(x){
+#   dgeByCon[[x]] %&gt;%
+#     estimateDisp()
+# }, simplify = FALSE)
+# write_rds(
+#   x = dgeByCon,
+#   path = here::here(&quot;data/dgeByCon.rds&quot;),
+#   compress = &quot;gz&quot;
+# )
+
+dgeByCon &lt;- here::here(&quot;output/dgeByCon.rds&quot;) %&gt;% read_rds()</code></pre>
+<p>To create the empirical null distribution of perturbation scores,
+sample labels were permuted to generate permuted logFCs and genes were
+ranked by the permuted p-values. Same number of top ranked genes as the
+number of DEGs defined under a certain condition was taken for each
+permutation and used in SPIA. This step was performed on Phoenix.</p>
+<p>SPIA algorithm was applied 1000 times for each condition. This step
+was performed on Phoenix and outputs were imported back.</p>
+<p>Looking at the distribution of permtued tAs for 10 KEGG pathways in
+HeLa_AZD8055. Most of the distributions are roughly normally
+distributed. Significance of KEGG pathway perturbation was defined by
+FDR derived from robust z-scores of observed perturbation scores, which
+was calculated by ((obs tA) - median(permuted tA))/mad(permuted tA).
+KEGG pathways with FDR &lt; 0.05 were defined to be significantly
+perturbed concensusly.</p>
+<pre class="r"><code>load(here::here(&quot;output/spia_net_permut.Rda&quot;))</code></pre>
+<pre class="r"><code>totalKegg &lt;- spia_net_permut %&gt;%
+  bind_rows() %&gt;%
+  split(f = .$gs_name) %&gt;% 
+  .[lapply(.,function(x){sum(x$tA)}) != 0] %&gt;%
+  length()
+gsToPlot &lt;- sample(1:totalKegg, 10)
+pl &lt;- spia_net_permut %&gt;%
+  bind_rows() %&gt;%
+  split(f = .$gs_name) %&gt;%
+  .[lapply(.,function(x){sum(x$tA)}) != 0] %&gt;%
+  .[gsToPlot] %&gt;%
+  lapply(function(x){
+    ggplot(x, aes(x = tA)) + 
+      geom_histogram()
+  }) 
+suppressMessages(plot_grid(plotlist = pl, 
+          nrow = 2))</code></pre>
+<p><img src="Pathway_analysis-KEGG-_files/figure-html/gsToPlot-1.png" width="1344" /></p>
+<pre class="r"><code>spia_net_sum &lt;- sapply(names(spia_net_permut), function(x){
+  spia_net_permut[[x]] %&gt;%
+    split(f = .$gs_name) %&gt;%
+    lapply(dplyr::mutate, 
+           MAD = mad(tA), 
+           MEDIAN = median(tA)) %&gt;%
+    lapply(dplyr::select,gs_name, MAD, 
+           MEDIAN) %&gt;%
+    lapply(unique) %&gt;%
+    bind_rows() %&gt;%
+    dplyr::filter(MAD != 0) %&gt;%
+    left_join(spia_netPer[[x]]) %&gt;%
+    mutate(
+      Z_mad = (tA - MEDIAN)/MAD) %&gt;% 
+    mutate(
+      p_mad = 2*pnorm(-abs(Z_mad)),
+      bonf_mad = p.adjust(p_mad, method = &quot;bonferroni&quot;),
+      FDR_mad = p.adjust(p_mad, method = &quot;fdr&quot;),
+      Sig = ifelse(FDR_mad &lt; 0.05, TRUE, FALSE)) %&gt;%
+    .[order(.$FDR_mad),] %&gt;%
+    mutate(Rank_spia = row_number()) 
+}, simplify = FALSE) </code></pre>
+<div id="summary-1" class="section level3">
+<h3>Summary</h3>
+<p>KEGG pathways that were significantly perturbed were extracted.
+Intersection between conditions were visualized.</p>
+<pre class="r"><code>spia_net_sig &lt;- sapply(names(spia_net_permut), function(x){
+    spia_net_sum[[x]] %&gt;%
+      dplyr::filter(FDR_mad &lt; 0.05) %&gt;%
+    pull(gs_name)  
+  }, simplify = FALSE)
+
+spia_net_sig %&gt;%
+  fromList() %&gt;%
+  .[,c(&quot;HEK293_AZD8055&quot;, &quot;HEK293_Starvation&quot;, &quot;SH-SY5Y_AZD8055&quot;, &quot;SH-SY5Y_Starvation&quot;, &quot;HeLa_AZD8055&quot;,
+                 &quot;HeLa_Starvation&quot;)] %&gt;%
+  upset(sets = colnames(.), 
+        nintersects = NA, 
+        keep.order = TRUE, 
+        queries = list(
+          list(query = intersects, 
+               params = list(&quot;HEK293_Starvation&quot;,  &quot;SH-SY5Y_Starvation&quot;, &quot;HeLa_Starvation&quot;),
+               color = &quot;orange&quot;,
+               active = T), 
+        list(query = intersects, 
+             params = list(&quot;HEK293_AZD8055&quot;,&quot;HEK293_Starvation&quot;, &quot;SH-SY5Y_AZD8055&quot;, &quot;SH-SY5Y_Starvation&quot;, &quot;HeLa_AZD8055&quot;, 
+                           &quot;HeLa_Starvation&quot;),
+             color = &quot;red&quot;,
+             active = T),
+        list(query = intersects,
+             params = list( &quot;SH-SY5Y_Starvation&quot;, &quot;SH-SY5Y_AZD8055&quot;),
+             color = &quot;blue&quot;,
+             active = T)
+        ))</code></pre>
+<div class="figure">
+<img src="Pathway_analysis-KEGG-_files/figure-html/spia_NETupset-1.png" alt="*Overlap between KEGG pathways perturbed under each condition.From the plot, there are 2 pathways enriched under all condition (red), 7 that were unique to SY5Y cell line (blue), and 1 that were unique to starvation treatment (orange). *" width="672" />
+<p class="caption">
+<em>Overlap between KEGG pathways perturbed under each condition.From
+the plot, there are 2 pathways enriched under all condition (red), 7
+that were unique to SY5Y cell line (blue), and 1 that were unique to
+starvation treatment (orange). </em>
+</p>
+</div>
+<p>Normalised perturbation scores of KEGG pathways mentioned above were
+visualised.</p>
+<pre class="r"><code>hp1_gs &lt;- spia_net_sig %&gt;%
+  Reduce(intersect,.)
+hp2_gs &lt;- spia_net_sig[str_subset(names(spia_net_sig), &quot;SH&quot;)] %&gt;%
+  Reduce(intersect,.) %&gt;%
+  setdiff(., spia_net_sig[str_subset(names(spia_net_sig), &quot;SH&quot;, negate = TRUE)] %&gt;%
+            unname() %&gt;%
+            unlist())
+hp3_gs &lt;- spia_net_sig[str_subset(names(spia_net_sig), &quot;Starvation&quot;)] %&gt;%
+  Reduce(intersect,.) %&gt;%
+  setdiff(., spia_net_sig[str_subset(names(spia_net_sig), &quot;Starvation&quot;, negate = TRUE)] %&gt;%
+            unname() %&gt;%
+            unlist())
+temp1 &lt;- sapply(names(spia_net_permut), function(x){
+  spia_net_sum[[x]] %&gt;%
+    dplyr::filter(gs_name %in% hp1_gs, 
+                  FDR_mad &lt; 0.05) %&gt;%
+    mutate(Condition = x) %&gt;%
+    dplyr::select(gs_name, Z_mad, Condition)
+}, simplify = FALSE)
+limit &lt;- temp1 %&gt;%
+  bind_rows() %&gt;%
+  pull(Z_mad) %&gt;%
+  max(abs(.))* c(-1, 1)
+hp1 &lt;- temp1 %&gt;%
+  bind_rows() %&gt;%
+  ggplot(aes(Condition, 
+             gs_name, fill = Z_mad)) +
+  geom_tile(aes(fill = Z_mad), fontsize =3) +
+  geom_text(aes(label = round(Z_mad,2))) +
+  scale_fill_distiller(palette = &quot;RdYlBu&quot;, 
+                       limit = limit,
+                       name = &quot;Normalised Perturbation Score&quot;
+                       ) +
+  theme_dark()+
+  theme(
+    axis.title=element_blank(),
+    panel.grid = element_blank(),
+    # axis.ticks = element_blank(),
+    legend.title = element_text(size= 8),
+    legend.key.size = unit(3, &#39;mm&#39;),
+    axis.text.x = element_text(angle = 45,hjust=1)
+    #   axis.text.y = element_text(colour = col)
+  ) +
+  ggtitle(&quot;Perturbed in all conditions&quot;)
+
+temp2 &lt;- sapply(str_subset(names(spia_net_sig), &quot;SH&quot;), function(x){
+  spia_net_sum[[x]] %&gt;%
+    dplyr::filter(gs_name %in% hp2_gs, 
+                  FDR_mad &lt; 0.05) %&gt;%
+    mutate(Condition = x) %&gt;%
+    dplyr::select(gs_name, Z_mad, Condition)
+}, simplify = FALSE)
+limit &lt;- temp2 %&gt;%
+  bind_rows() %&gt;%
+  pull(Z_mad) %&gt;%
+  max(abs(.))* c(-1, 1)
+hp2 &lt;- temp2 %&gt;%
+  bind_rows() %&gt;%
+  ggplot(aes(Condition, 
+             gs_name, fill = Z_mad)) +
+  geom_tile(aes(fill = Z_mad), fontsize =3) +
+  geom_text(aes(label = round(Z_mad,2))) +
+  scale_fill_distiller(palette = &quot;RdYlBu&quot;, 
+                       limit = limit,
+                       name = &quot;Normalised Perturbation Score&quot;
+                       ) +
+  theme_dark()+
+  theme(
+    axis.title=element_blank(),
+    panel.grid = element_blank(),
+    # axis.ticks = element_blank(),
+    legend.title = element_text(size= 8),
+    legend.key.size = unit(3, &#39;mm&#39;),
+    axis.text.x = element_text(angle = 45,hjust=1)
+    #   axis.text.y = element_text(colour = col)
+  ) +
+  ggtitle(&quot;Perturbed only in SY5Y&quot;)
+
+temp3 &lt;- sapply(str_subset(names(spia_net_sig), &quot;Starvation&quot;), function(x){
+  spia_net_sum[[x]] %&gt;%
+    dplyr::filter(gs_name %in% hp3_gs, 
+                  FDR_mad &lt; 0.05) %&gt;%
+    mutate(Condition = x) %&gt;%
+    dplyr::select(gs_name, Z_mad, Condition)
+}, simplify = FALSE)
+limit &lt;- temp3 %&gt;%
+  bind_rows() %&gt;%
+  pull(Z_mad) %&gt;%
+  max(abs(.))* c(-1, 1)
+hp3 &lt;- temp3 %&gt;%
+  bind_rows() %&gt;%
+  ggplot(aes(Condition, 
+             gs_name, fill = Z_mad)) +
+  geom_tile(aes(fill = Z_mad), fontsize =3) +
+  geom_text(aes(label = round(Z_mad,2))) +
+  scale_fill_distiller(palette = &quot;RdYlBu&quot;, 
+                       limit = limit,
+                       name = &quot;Normalised Perturbation Score&quot;
+                       ) +
+  theme_dark()+
+  theme(
+    axis.title=element_blank(),
+    panel.grid = element_blank(),
+    # axis.ticks = element_blank(),
+    legend.title = element_text(size= 8),
+    legend.key.size = unit(3, &#39;mm&#39;),
+    axis.text.x = element_text(angle = 45,hjust=1)
+    #   axis.text.y = element_text(colour = col)
+  ) +
+  ggtitle(&quot;Perturbed only under starvation&quot;)
+# pdf(file = &quot;/Users/wenjunliu/RNA_seq_autophagicflux/Manuscript/Figure/newest/summary_KEGG_spia(3hp).pdf&quot;,
+#     width = 14,
+#     height = 7)
+plot_grid(hp1, 
+          plot_grid(hp2, hp3, 
+                    ncol = 2, 
+                    rel_width = c(2.5, 1),
+                    scale = c(1.2, 0.8),
+                    labels = c(&quot;b&quot;, &quot;c&quot;)), 
+          nrow = 2, 
+          rel_heights = c(1, 2), 
+          labels = c(&quot;a&quot;, &quot;&quot;),
+          scale = c(0.8,1))</code></pre>
+<div class="figure">
+<img src="Pathway_analysis-KEGG-_files/figure-html/perturbKEGG_3_hp-1.png" alt="Consensus PCs of KEGG pathways significant perturbed (a) in all conditions (b) only in SY5Y cell line, and (c) only under starvation.*" width="960" />
+<p class="caption">
+Consensus PCs of KEGG pathways significant perturbed (a) in all
+conditions (b) only in SY5Y cell line, and (c) only under starvation.*
+</p>
+</div>
+<pre class="r"><code># dev.off()</code></pre>
+<pre class="r"><code>PerKEGG5 &lt;- spia_net_sum %&gt;%
+  lapply(dplyr::filter, FDR_mad &lt; 0.05) %&gt;%
+  bind_rows() %&gt;%
+  group_by(gs_name) %&gt;%
+  filter(n() &gt; 4) %&gt;%
+  pull(gs_name) %&gt;%
+  unique()
+temp &lt;- sapply(names(spia_net_permut), function(x){
+  spia_net_sum[[x]] %&gt;%
+    dplyr::filter(gs_name %in% PerKEGG5) %&gt;%
+    mutate(Condition = x) %&gt;%
+    dplyr::select(gs_name, Z_mad, Condition, Sig)
+}, simplify = FALSE) %&gt;%
+  bind_rows() %&gt;%
+  mutate(
+    Z_mad = round(Z_mad, 2),
+    Z_label = ifelse(Sig, paste(Z_mad, &quot;*&quot;, sep = &quot;&quot;), Z_mad),
+    Extreme = ifelse(abs(Z_mad) &gt; 10, TRUE, FALSE), 
+    Z_label = ifelse(Extreme, &quot;&gt;10&quot;, Z_mad))
+PerKEGG5_ro &lt;- temp %&gt;%
+  mutate(
+    nameLength = vapply(.$gs_name, 
+                        function(x){str_split(x, &quot; &quot;)[[1]] %&gt;%
+                            length},
+                        integer(1)),
+    gs_name = ifelse(nameLength &gt; 3,
+                     vapply(.$gs_name, 
+                            function(x){str_replace_nth(x, &quot; &quot;, &quot;\n&quot;, 3)},
+                            character(1)), 
+                     gs_name) ) %&gt;%
+  dplyr::select(gs_name, Z_mad, Condition) %&gt;%
+  pivot_wider(names_from = Condition, values_from = Z_mad) %&gt;%
+  replace(is.na(.),0) %&gt;%
+  column_to_rownames(&quot;gs_name&quot;) %&gt;%
+  # dist() %&gt;%
+  # hclust() 
+  mutate(overall = rowSums(.)) %&gt;%
+  .[order(.$overall, decreasing = FALSE),] %&gt;%
+  rownames(.)
+temp %&gt;%
+  mutate(
+    nameLength = vapply(.$gs_name, 
+                        function(x){str_split(x, &quot; &quot;)[[1]] %&gt;%
+                            length},
+                        integer(1)),
+    gs_name = ifelse(nameLength &gt; 3,
+                     vapply(.$gs_name, 
+                            function(x){str_replace_nth(x, &quot; &quot;, &quot;\n&quot;, 3)},
+                            character(1)), 
+                     gs_name) ) %&gt;%
+  ggplot(aes(factor(gs_name, levels = PerKEGG5_ro), Condition)) +
+  geom_tile(data = . %&gt;% dplyr::filter(!Extreme),
+            aes(fill = Z_mad)) +
+  # scale_fill_continuous_diverging(palette = &quot;Blue-Red 3&quot;,
+  #                                  name = &quot;Normalised Perturbation Score&quot;,
+  #                                  limits = c(-10,10)) +
+  scale_fill_distiller(palette = &quot;RdYlBu&quot;,
+                       limit = c(-10,10),
+                       name = &quot;Normalised\nPerturbation\nScore&quot;
+                       ) +
+  geom_tile(data = . %&gt;% dplyr::filter(Extreme),
+            fill = &quot;tomato3&quot;) +
+  geom_text(data = . %&gt;% dplyr::filter(!Sig),
+            aes(label = Z_label), size = 4, color = &quot;azure4&quot;) +
+  geom_text(data = . %&gt;% dplyr::filter(Sig),
+            aes(label = Z_label), size = 4, color = &quot;black&quot;) +
+  theme(
+    axis.title=element_blank(),
+    panel.grid = element_blank(),
+    axis.text.y =element_text(size=14),
+    axis.text.x.bottom  =element_text(size=12),
+    axis.ticks = element_blank(),
+    legend.title = element_text(size= 12),
+    legend.key.size = unit(1, &#39;cm&#39;),
+    axis.text.x = element_text(angle = 45, hjust=1, size = 10),
+    plot.margin = unit(c(0, 0, 0, 0), &quot;null&quot;),
+    panel.margin = unit(c(0, 0, 0, 0), &quot;null&quot;),
+    #   axis.text.y = element_text(colour = col)
+  ) +
+  # ggtitle(&quot;Perturbation&quot;) +
+  coord_fixed(ratio= 1.8) +
+  panel_border(remove = TRUE)</code></pre>
+<div class="figure">
+<img src="Pathway_analysis-KEGG-_files/figure-html/unnamed-chunk-1-1.png" alt="*Normalised perturbation scores of pathways that were significantly perturbed in all but one conditions*" width="1536" />
+<p class="caption">
+<em>Normalised perturbation scores of pathways that were significantly
+perturbed in all but one conditions</em>
+</p>
+</div>
+</div>
+</div>
+
+
+
+
+</div>
+
+<script>
+
+// add bootstrap table styles to pandoc tables
+function bootstrapStylePandocTables() {
+  $('tr.odd').parent('tbody').parent('table').addClass('table table-condensed');
+}
+$(document).ready(function () {
+  bootstrapStylePandocTables();
+});
+
+
+</script>
+
+<!-- tabsets -->
+
+<script>
+$(document).ready(function () {
+  window.buildTabsets("TOC");
+});
+
+$(document).ready(function () {
+  $('.tabset-dropdown > .nav-tabs > li').click(function () {
+    $(this).parent().toggleClass('nav-tabs-open');
+  });
+});
+</script>
+
+<!-- code folding -->
+
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>
